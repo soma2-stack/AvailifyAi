@@ -8,28 +8,47 @@ type Phase = "idle" | "loading" | "done" | "error";
 
 const BRAND_NAME = "AvailifyAi";
 const PRIMARY_PLATFORM_COUNT = 8;
+const FREE_SEARCH_LIMIT = 3;
+const BULK_SEARCH_LIMIT = 20;
 const SUGGESTION_CHIPS = ["availifyai", "neonforge", "brandpilot", "creatorhq"];
+const FREE_TIER_FEATURES = [
+  "3 searches total",
+  "Basic availability check only",
+  ".com domain check",
+];
+const PRO_TIER_FEATURES = [
+  "Unlimited searches",
+  "AI Name Assistant",
+  "Bulk Domain Checker for up to 20 names",
+  "Instant .com, .ai, .io, .net, and .co checks",
+  "Watchlist and availability alerts",
+];
+const AI_ASSISTANT_PROMPTS = [
+  "Shorten it for a cleaner brand",
+  "Find a stronger AI-focused angle",
+  "Make it easier to pronounce",
+];
 
 const FEATURES = [
   {
     icon: "AI",
-    title: "Multi-platform checks",
-    body: "Quickly see where your name is available, taken, or needs manual verification across popular apps and domains.",
+    title: "AI Name Assistant",
+    body: "Brainstorm stronger, more memorable names and see which direction is most brandable.",
   },
   {
-    icon: "99",
-    title: "Name strength score",
-    body: "A simple score based on length, readability, availability, and brand potential.",
+    icon: "20",
+    title: "Bulk domain checker",
+    body: "Pro users can check up to 20 name ideas at once instead of testing them one by one.",
   },
   {
-    icon: "+",
-    title: "Smart alternatives",
-    body: "When your first choice is taken, get stronger variations tagged by use case.",
+    icon: "TLD",
+    title: "Instant extension grid",
+    body: "Compare .com, .ai, .io, .net, and .co side by side before you buy a domain.",
   },
   {
-    icon: ".com",
-    title: "Brand-ready results",
-    body: "Find matching domains, social handles, and creator-friendly name options in one focused view.",
+    icon: "♥",
+    title: "Watchlist & alerts",
+    body: "Save favorite names and track them for availability changes as your shortlist evolves.",
   },
 ];
 
@@ -47,7 +66,7 @@ const FAQS = [
   {
     question: "Is AvailifyAi free?",
     answer:
-      "Yes. Core checks across the supported platforms and domains run without an account.",
+      "Yes. The free tier includes 3 total searches with basic availability checks. Pro is $10 per month for unlimited searches, bulk checks, AI help, premium TLDs, and watchlist alerts.",
   },
   {
     question: "Can I use it for a business name?",
@@ -57,7 +76,7 @@ const FAQS = [
   {
     question: "Does it check domain names?",
     answer:
-      "Yes. It checks .com and .io with conservative DNS lookups and marks ambiguous responses for manual verification.",
+      "Yes. Free users see .com. Pro users unlock instant parallel checks for .com, .ai, .io, .net, and .co.",
   },
 ];
 
@@ -99,6 +118,34 @@ const READY_BADGE =
 
 function normalizeInput(value: string): string {
   return value.trim().replace(/^@+/, "");
+}
+
+function parseBulkNames(value: string, isSubscribed: boolean): string[] {
+  const limit = isSubscribed ? BULK_SEARCH_LIMIT : 1;
+  const seen = new Set<string>();
+
+  return value
+    .split(/[\n,]+/)
+    .map(normalizeInput)
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function getDomainTone(index: number): Status {
+  const tones: Status[] = ["available", "unknown", "taken", "available", "unknown"];
+  return tones[index % tones.length];
+}
+
+function getDomainPreviewLabel(status: Status): string {
+  if (status === "available") return "Available";
+  if (status === "taken") return "Taken";
+  return "Checking needed";
 }
 
 function scoreName(handle: string, results: CheckResult[]): number {
@@ -349,14 +396,127 @@ function DomainRow({
   );
 }
 
+function FeatureCheckList({ items }: { items: string[] }) {
+  return (
+    <ul className="mt-5 space-y-3">
+      {items.map((item) => (
+        <li key={item} className="flex gap-3 text-sm font-semibold text-[#cdd2e2]">
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#46e0a0]/30 bg-[#46e0a0]/10 text-xs text-[#6fe9b4]">
+            ✓
+          </span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TldGrid({
+  displayHandle,
+  isSubscribed,
+  resultByName,
+  isLoading,
+}: {
+  displayHandle: string;
+  isSubscribed: boolean;
+  resultByName: Map<string, CheckResult>;
+  isLoading: boolean;
+}) {
+  const visibleDomains = isSubscribed
+    ? DOMAIN_META
+    : DOMAIN_META.filter((domain) => domain.extension === ".com");
+
+  return (
+    <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-black text-white">TLD extension check</div>
+          <div className="mt-1 text-xs text-[#7e859b]">
+            {isSubscribed
+              ? "Pro grid: .com, .ai, .io, .net, and .co in parallel"
+              : "Free tier: .com only"}
+          </div>
+        </div>
+        {!isSubscribed && (
+          <span className="rounded-full border border-[#ffc24d]/35 bg-[#ffc24d]/10 px-3 py-1 text-xs font-black text-[#ffd982]">
+            Pro unlocks 5 TLDs
+          </span>
+        )}
+      </div>
+
+      <div
+        className={
+          isSubscribed
+            ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
+            : "grid gap-3 sm:grid-cols-2"
+        }
+      >
+        {visibleDomains.map((domain, index) => {
+          const result = resultByName.get(domain.name);
+          const status = result?.status ?? getDomainTone(index);
+          const view = STATUS_VIEW[status];
+          const domainName = `${displayHandle.toLowerCase()}${domain.extension}`;
+          const loading = isLoading && !result;
+          const canOpen = result?.status === "unknown" || result?.status === "taken";
+
+          return (
+            <div
+              key={domain.name}
+              className={`rounded-2xl border bg-white/[0.035] p-4 ${result ? view.border : "border-white/10"}`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-lg border border-white/10 bg-black/25 px-2 py-1 font-mono text-xs font-black text-white">
+                  {domain.extension}
+                </span>
+                <span className={`h-2 w-2 rounded-full ${loading ? "animate-pulse bg-[#5b8cff]" : view.dot}`} />
+              </div>
+              <div className="mt-4 truncate font-mono text-sm font-black text-white">
+                {domainName}
+              </div>
+              <div className={`mt-2 text-xs font-bold ${view.text}`}>
+                {loading
+                  ? "Checking..."
+                  : result
+                    ? getResultLabel(result)
+                    : getDomainPreviewLabel(status)}
+              </div>
+              {canOpen && result && (
+                <a
+                  href={result.profileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex rounded-lg text-xs font-black text-[#8fb0ff] underline-offset-4 hover:underline"
+                >
+                  Whois
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!isSubscribed && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-xs font-semibold text-[#9298ad]">
+          Upgrade to Pro to reveal .ai, .io, .net, and .co checks for every search.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [username, setUsername] = useState("");
+  const [bulkInput, setBulkInput] = useState("availifyai");
   const [phase, setPhase] = useState<Phase>("idle");
   const [results, setResults] = useState<CheckResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [checked, setChecked] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [showAllPlatforms, setShowAllPlatforms] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [searchCount, setSearchCount] = useState(0);
+  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [bulkQueue, setBulkQueue] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   const resultByName = useMemo(
@@ -382,20 +542,31 @@ export default function Home() {
     0,
     PLATFORM_META.length - PRIMARY_PLATFORM_COUNT
   );
+  const bulkNames = parseBulkNames(bulkInput, isSubscribed);
+  const remainingFreeSearches = Math.max(0, FREE_SEARCH_LIMIT - searchCount);
+  const hasAvailableResult = results.some((result) => result.status === "available");
+  const savedNames = new Set(watchlist.map((item) => item.toLowerCase()));
 
   async function runCheck(value: string) {
     const handle = normalizeInput(value);
     if (!handle) return;
+    if (!isSubscribed && searchCount >= FREE_SEARCH_LIMIT) {
+      setError("Free searches used. Upgrade to Pro for unlimited searches.");
+      setPhase("error");
+      return;
+    }
 
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
     setUsername(handle);
+    setBulkInput(handle);
     setChecked(handle);
     setPhase("loading");
     setError(null);
     setResults([]);
+    if (!isSubscribed) setSearchCount((count) => Math.min(FREE_SEARCH_LIMIT, count + 1));
 
     window.requestAnimationFrame(() => {
       document
@@ -460,11 +631,35 @@ export default function Home() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void runCheck(username);
+    const names = parseBulkNames(bulkInput, isSubscribed);
+    if (names.length === 0) return;
+    setBulkQueue(names);
+    void runCheck(names[0]);
   }
 
   function checkNamed(name: string) {
     void runCheck(name);
+  }
+
+  function handleBulkInputChange(value: string) {
+    if (isSubscribed) {
+      setBulkInput(value);
+      setUsername(parseBulkNames(value, true)[0] ?? "");
+      return;
+    }
+
+    const firstLine = value.split(/[\n,]+/)[0] ?? "";
+    setBulkInput(firstLine);
+    setUsername(normalizeInput(firstLine));
+  }
+
+  function saveName(name: string) {
+    if (!isSubscribed) return;
+    setWatchlist((items) => {
+      const key = name.toLowerCase();
+      if (items.some((item) => item.toLowerCase() === key)) return items;
+      return [name, ...items].slice(0, 8);
+    });
   }
 
   return (
@@ -522,38 +717,104 @@ export default function Home() {
           smarter alternatives when your first idea is taken.
         </p>
 
-        <form onSubmit={onSubmit} className="mx-auto mt-10 max-w-[700px]">
-          <label htmlFor="username" className="sr-only">
-            Username to check
-          </label>
+        <div className="mx-auto mt-8 flex max-w-[700px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.035] p-1">
+          <button
+            type="button"
+            onClick={() => setIsSubscribed(false)}
+            className={`min-h-10 flex-1 rounded-xl px-4 py-2 text-sm font-black transition ${
+              !isSubscribed
+                ? "bg-white text-[#07080f]"
+                : "text-[#aab0c4] hover:text-white"
+            }`}
+          >
+            Free preview
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSubscribed(true)}
+            className={`min-h-10 flex-1 rounded-xl px-4 py-2 text-sm font-black transition ${
+              isSubscribed
+                ? "bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] text-[#07080f]"
+                : "text-[#aab0c4] hover:text-white"
+            }`}
+          >
+            Pro preview
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="mx-auto mt-5 max-w-[700px]">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-bold">
+            <label htmlFor="bulk-names" className="uppercase text-[#7e859b]">
+              {isSubscribed ? "Bulk search up to 20 names" : "Single search"}
+            </label>
+            <span
+              className={`rounded-full border px-3 py-1 ${
+                isSubscribed
+                  ? "border-[#46e0a0]/35 bg-[#46e0a0]/10 text-[#6fe9b4]"
+                  : "border-[#ffc24d]/35 bg-[#ffc24d]/10 text-[#ffd982]"
+              }`}
+            >
+              {isSubscribed
+                ? "Unlimited searches"
+                : `${remainingFreeSearches}/${FREE_SEARCH_LIMIT} free searches left`}
+            </span>
+          </div>
           <div className="flex flex-col gap-2 rounded-[20px] border border-white/10 bg-white/[0.045] p-2 shadow-[0_32px_80px_-28px_rgba(0,0,0,0.85)] backdrop-blur-xl sm:flex-row">
-            <div className="relative flex min-w-0 flex-1 items-center">
-              <span className="pointer-events-none absolute left-4 font-mono text-xl text-[#6b7186]">
+            <div className="relative min-w-0 flex-1">
+              <span className="pointer-events-none absolute left-4 top-4 font-mono text-xl text-[#6b7186]">
                 @
               </span>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                inputMode="text"
+              <textarea
+                id="bulk-names"
+                name="bulk-names"
+                rows={isSubscribed ? 5 : 1}
                 autoComplete="off"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder="availifyai"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                className="h-14 w-full rounded-2xl border border-transparent bg-transparent pl-10 pr-4 font-mono text-lg text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                placeholder={
+                  isSubscribed
+                    ? "availifyai\nbrandpilot\ncreatorhq"
+                    : "availifyai"
+                }
+                value={bulkInput}
+                onChange={(event) => handleBulkInputChange(event.target.value)}
+                className={`w-full resize-none rounded-2xl border border-transparent bg-transparent pl-10 pr-4 font-mono text-lg text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30 ${
+                  isSubscribed ? "min-h-[150px] py-4" : "h-14 overflow-hidden py-3"
+                }`}
               />
+              {!isSubscribed && (
+                <span className="absolute right-3 top-3 rounded-full border border-[#ffc24d]/35 bg-[#33250b] px-3 py-1 text-xs font-black text-[#ffd982]">
+                  Bulk Search (Pro Only)
+                </span>
+              )}
             </div>
             <button
               type="submit"
-              disabled={isLoading || !normalizeInput(username)}
-              className="h-14 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-7 text-base font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.28)] transition disabled:cursor-not-allowed disabled:opacity-55"
+              disabled={isLoading || bulkNames.length === 0 || (!isSubscribed && remainingFreeSearches === 0)}
+              className="min-h-14 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-7 text-base font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.28)] transition disabled:cursor-not-allowed disabled:opacity-55 sm:min-w-[160px]"
             >
-              {isLoading ? "Checking..." : "Check Name"}
+              {isLoading
+                ? "Checking..."
+                : isSubscribed && bulkNames.length > 1
+                  ? `Check ${bulkNames.length} Names`
+                  : "Check Name"}
             </button>
           </div>
+          {isSubscribed && bulkNames.length > 1 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {bulkNames.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => checkNamed(name)}
+                  className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 font-mono text-xs font-bold text-[#cdd2e2] hover:border-[#5b8cff]/50 hover:text-white"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
         </form>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -575,7 +836,7 @@ export default function Home() {
         className="relative z-10 mx-auto grid max-w-[1160px] gap-5 px-6 py-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]"
       >
         <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-7">
-          <div className="mb-6 grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] sm:grid-cols-3">
+          <div className="mb-6 grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] sm:grid-cols-4">
             <div className="border-b border-white/10 p-4 sm:border-b-0 sm:border-r">
               <div className="text-2xl font-black text-white">{completeCount}</div>
               <div className="mt-1 text-xs text-[#7e859b]">checks complete</div>
@@ -592,6 +853,14 @@ export default function Home() {
               </div>
               <div className="mt-1 text-xs text-[#7e859b]">
                 strong alternatives
+              </div>
+            </div>
+            <div className="border-t border-white/10 p-4 sm:border-l sm:border-t-0">
+              <div className="text-2xl font-black text-white">
+                {isSubscribed ? "∞" : remainingFreeSearches}
+              </div>
+              <div className="mt-1 text-xs text-[#7e859b]">
+                {isSubscribed ? "Pro searches" : "free searches left"}
               </div>
             </div>
           </div>
@@ -611,8 +880,27 @@ export default function Home() {
                     ? "Usable name with room to improve"
                     : "Try a stronger variation"}
               </p>
+              {bulkQueue.length > 1 && (
+                <p className="mt-2 text-xs font-semibold text-[#8fb0ff]">
+                  Bulk queue ready: {bulkQueue.slice(0, 4).join(", ")}
+                  {bulkQueue.length > 4 ? ` +${bulkQueue.length - 4} more` : ""}
+                </p>
+              )}
             </div>
-            <div className="min-w-[170px] rounded-2xl border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row md:flex-col">
+              <button
+                type="button"
+                onClick={() => saveName(displayHandle)}
+                disabled={!isSubscribed || !hasAvailableResult || savedNames.has(displayHandle.toLowerCase())}
+                className="min-h-12 rounded-2xl border border-[#ff6b7a]/35 bg-[#ff6b7a]/10 px-4 text-sm font-black text-[#ff9ca6] transition enabled:hover:border-[#ff6b7a]/70 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.035] disabled:text-[#7e859b]"
+              >
+                {isSubscribed
+                  ? savedNames.has(displayHandle.toLowerCase())
+                    ? "♥ Saved"
+                    : "♡ Save Name"
+                  : "Lock Watchlist"}
+              </button>
+              <div className="min-w-[170px] rounded-2xl border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-4">
               <div className="flex items-end gap-1">
                 <span className="text-4xl font-black text-white">{score}</span>
                 <span className="pb-1 text-sm font-bold text-[#7e859b]">
@@ -628,6 +916,7 @@ export default function Home() {
                   style={{ width: `${score}%` }}
                 />
               </div>
+            </div>
             </div>
           </div>
 
@@ -668,23 +957,12 @@ export default function Home() {
             </button>
           )}
 
-          <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="mb-3 text-sm font-black text-white">Domains</div>
-            <ul className="flex flex-col gap-2">
-              {DOMAIN_META.map((domain) => {
-                const result = resultByName.get(domain.name);
-                const domainName = `${displayHandle.toLowerCase()}${domain.extension}`;
-                return (
-                  <DomainRow
-                    key={domain.name}
-                    domain={domainName}
-                    result={result}
-                    loading={isLoading && !result}
-                  />
-                );
-              })}
-            </ul>
-          </div>
+          <TldGrid
+            displayHandle={displayHandle}
+            isSubscribed={isSubscribed}
+            resultByName={resultByName}
+            isLoading={isLoading}
+          />
         </div>
 
         <aside className="space-y-5">
@@ -715,6 +993,42 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="rounded-[24px] border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-5 backdrop-blur-xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase text-[#8fb0ff]">
+                  AI Name Assistant
+                </div>
+                <h2 className="mt-1 text-lg font-black text-white">
+                  Brainstorm with context
+                </h2>
+              </div>
+              {!isSubscribed && (
+                <span className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs font-black text-[#c2c7d8]">
+                  Pro
+                </span>
+              )}
+            </div>
+            <p className="text-sm leading-6 text-[#c2c7d8]">
+              {isSubscribed
+                ? `Ask for sharper variations of ${displayHandle}, compare naming angles, and choose the strongest direction.`
+                : "Upgrade to unlock guided AI brainstorming, naming angles, and smarter recommendation explanations."}
+            </p>
+            <div className="mt-4 space-y-2">
+              {AI_ASSISTANT_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  disabled={!isSubscribed}
+                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-left text-xs font-bold text-[#cdd2e2] disabled:cursor-not-allowed disabled:text-[#7e859b] enabled:hover:border-[#5b8cff]/50 enabled:hover:text-white"
+                >
+                  {prompt}
+                  <span className="text-[#8fb0ff]">{isSubscribed ? "Ask" : "Lock"}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
             <div className="mb-1 text-xs font-bold uppercase text-[#5b8cff]">
               Smart alternatives
@@ -724,11 +1038,9 @@ export default function Home() {
             </h2>
             <div className="mt-4 space-y-2">
               {alternatives.map((item) => (
-                <button
+                <div
                   key={item.name}
-                  type="button"
-                  onClick={() => checkNamed(item.name)}
-                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-left hover:border-[#5b8cff]/50"
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-mono text-sm font-bold text-white">
@@ -738,15 +1050,27 @@ export default function Home() {
                       {item.tag}
                     </span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-3">
+                  <span className="flex shrink-0 items-center gap-2">
                     <span className="text-sm font-black text-[#6fe9b4]">
                       {item.score}
                     </span>
-                    <span className="text-xs font-bold text-[#8fb0ff]">
+                    <button
+                      type="button"
+                      onClick={() => checkNamed(item.name)}
+                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#8fb0ff] hover:bg-white/[0.06]"
+                    >
                       Check
-                    </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveName(item.name)}
+                      disabled={!isSubscribed || savedNames.has(item.name.toLowerCase())}
+                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#ff9ca6] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-[#7e859b]"
+                    >
+                      {savedNames.has(item.name.toLowerCase()) ? "♥" : "♡"}
+                    </button>
                   </span>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -762,6 +1086,56 @@ export default function Home() {
               Clean spelling, strong score, and a domain-ready variation for{" "}
               {displayHandle}.
             </p>
+          </div>
+
+          <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-black text-white">Watchlist</h2>
+              <span
+                className={`rounded-full border px-3 py-1 text-xs font-black ${
+                  isSubscribed
+                    ? "border-[#46e0a0]/35 bg-[#46e0a0]/10 text-[#6fe9b4]"
+                    : "border-white/10 bg-black/25 text-[#9298ad]"
+                }`}
+              >
+                {isSubscribed ? `${watchlist.length} saved` : "Locked"}
+              </span>
+            </div>
+            {isSubscribed ? (
+              watchlist.length > 0 ? (
+                <div className="space-y-2">
+                  {watchlist.map((name) => (
+                    <div
+                      key={name}
+                      className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+                    >
+                      <span className="min-w-0 truncate font-mono text-sm font-bold text-white">
+                        {name}
+                      </span>
+                      <span className="text-xs font-bold text-[#6fe9b4]">
+                        Alerts on
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-[#9298ad]">
+                  Click a Save button next to an available or suggested name to
+                  start your watchlist.
+                </div>
+              )
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-lg">
+                  🔒
+                </div>
+                <div className="font-black text-white">Save names with Pro</div>
+                <p className="mt-2 text-sm leading-6 text-[#9298ad]">
+                  Your shortlist, favorites, and availability alerts unlock on
+                  the $10/mo plan.
+                </p>
+              </div>
+            )}
           </div>
         </aside>
       </section>
@@ -832,87 +1206,126 @@ export default function Home() {
         id="pricing"
         className="relative z-10 mx-auto max-w-[1160px] px-6 py-16"
       >
-        <div className="grid gap-8 rounded-[30px] border border-[#5b8cff]/30 bg-[#5b8cff]/10 p-6 sm:p-10 lg:grid-cols-2">
-          <div>
+        <div className="mb-10 text-center">
+          <div className="mb-3 text-xs font-black uppercase text-[#5b8cff]">
+            Pricing
+          </div>
+          <h2 className="text-3xl font-black text-white [text-wrap:balance] sm:text-4xl">
+            Start free, upgrade when names get serious.
+          </h2>
+          <p className="mx-auto mt-4 max-w-[58ch] leading-7 text-[#aab0c4]">
+            Free is intentionally simple. Pro turns AvailifyAi into a serious
+            naming workspace with bulk search, AI help, premium TLDs, and alerts.
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <article className="rounded-[28px] border border-white/10 bg-white/[0.035] p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-xs font-black uppercase text-[#9298ad]">
+                  Free Tier
+                </div>
+                <h3 className="mt-2 text-2xl font-black text-white">Basic</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-4xl font-black text-white">$0</span>
+                <span className="text-sm font-bold text-[#7e859b]">/mo</span>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-[#9298ad]">
+              Enough to test a few ideas, with a hard limit that makes the Pro
+              upgrade clear.
+            </p>
+            <FeatureCheckList items={FREE_TIER_FEATURES} />
+            <a
+              href="#search"
+              className="mt-7 flex min-h-12 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.05] px-5 text-sm font-black text-white hover:border-white/30"
+            >
+              Try 3 Searches
+            </a>
+          </article>
+
+          <article className="relative overflow-hidden rounded-[28px] border border-[#5b8cff]/45 bg-[#5b8cff]/10 p-6 shadow-[0_40px_100px_-45px_rgba(91,140,255,0.55)]">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-4 py-2 text-xs font-black text-white">
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-[#5b8cff] to-[#9b7bff] text-xs text-[#07080f]">
                 ★
               </span>
-              Pro
+              Best value
             </div>
-            <h2 className="text-3xl font-black text-white sm:text-4xl">
-              AvailifyAi Pro
-            </h2>
-            <p className="mt-4 max-w-[42ch] leading-7 text-[#c2c7d8]">
-              Save your searches, compare names, export a full brand report,
-              and generate smarter alternatives with AI.
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase text-[#8fb0ff]">
+                  Pro Tier
+                </div>
+                <h3 className="mt-2 text-3xl font-black text-white">
+                  AvailifyAi Pro
+                </h3>
+              </div>
+              <div className="sm:text-right">
+                <span className="text-5xl font-black text-white">$10</span>
+                <span className="text-sm font-bold text-[#c2c7d8]">/mo</span>
+              </div>
+            </div>
+            <p className="mt-4 max-w-[56ch] leading-7 text-[#c2c7d8]">
+              Unlimited searches, AI naming help, bulk domain checking, premium
+              TLD coverage, and a watchlist built for real brand decisions.
             </p>
+            <FeatureCheckList items={PRO_TIER_FEATURES} />
             <div className="mt-7 flex flex-wrap gap-3">
               <a
                 href="#search"
                 className="rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 py-3 text-sm font-black text-[#07080f]"
               >
-                Join Waitlist
+                Upgrade to Pro
               </a>
               <a
                 href="#features"
                 className="rounded-2xl border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white"
               >
-                View Pro Features
+                Compare Features
               </a>
             </div>
-          </div>
-          <div className="rounded-[22px] border border-white/10 bg-black/30 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm font-black text-white">Saved names</span>
-              <span className="text-xs font-bold text-[#8fb0ff]">4 saved</span>
-            </div>
-            <div className="space-y-2">
-              {alternatives.slice(0, 3).map((item) => (
-                <div
-                  key={item.name}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"
-                >
-                  <span className="min-w-0 truncate font-mono text-sm text-white">
-                    {item.name}
-                  </span>
-                  <span className="font-black text-[#6fe9b4]">{item.score}</span>
-                </div>
-              ))}
-            </div>
-            <div className="my-4 h-px bg-white/10" />
-            <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
-              <div className="mb-3 text-xs font-black uppercase text-[#7e859b]">
-                Score comparison
+
+            <div className="mt-6 rounded-[22px] border border-white/10 bg-black/30 p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-black text-white">Pro workspace</span>
+                <span className="text-xs font-bold text-[#8fb0ff]">Unlocked</span>
               </div>
-              {[displayHandle, bestAlternative.name].map((name, index) => {
-                const value = index === 0 ? score : bestAlternative.score;
-                return (
-                  <div
-                    key={name}
-                    className={index === 0 ? "flex items-center gap-3" : "mt-3 flex items-center gap-3"}
-                  >
-                    <span className="w-28 truncate font-mono text-xs text-[#aab0c4]">
-                      {name}
-                    </span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className={
-                          index === 0
-                            ? "h-full rounded-full bg-[#5b8cff]"
-                            : "h-full rounded-full bg-[#46e0a0]"
-                        }
-                        style={{ width: `${value}%` }}
-                      />
-                    </div>
-                    <span className="w-8 text-right text-sm font-black text-white">
-                      {value}
-                    </span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="text-xs font-black uppercase text-[#7e859b]">
+                    Bulk checker
                   </div>
-                );
-              })}
+                  <div className="mt-2 text-2xl font-black text-white">20</div>
+                  <div className="text-xs text-[#9298ad]">names per batch</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="text-xs font-black uppercase text-[#7e859b]">
+                    Premium TLDs
+                  </div>
+                  <div className="mt-2 font-mono text-sm font-black text-white">
+                    .com .ai .io .net .co
+                  </div>
+                  <div className="mt-1 text-xs text-[#9298ad]">parallel checks</div>
+                </div>
+              </div>
+              <div className="my-4 h-px bg-white/10" />
+              <div className="space-y-2">
+                {alternatives.slice(0, 3).map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"
+                  >
+                    <span className="min-w-0 truncate font-mono text-sm text-white">
+                      {item.name}
+                    </span>
+                    <span className="font-black text-[#6fe9b4]">{item.score}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </article>
         </div>
       </section>
 

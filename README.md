@@ -7,6 +7,22 @@ sites, and matching domains.
 Built with **Next.js (App Router) + TypeScript + Tailwind CSS**. No database,
 deploys to Vercel with zero configuration.
 
+## Product tiers
+
+**Free ($0/mo)**
+
+- 3 searches total.
+- Basic availability check only.
+- .com domain result.
+
+**Pro ($10/mo)**
+
+- Unlimited searches.
+- AI Name Assistant for brainstorming and picking stronger names.
+- Bulk Domain Checker for up to 20 names at once.
+- Instant TLD checks for .com, .ai, .io, .net, and .co.
+- Watchlist and alerts for saved favorite names.
+
 ---
 
 ## How it works
@@ -43,6 +59,7 @@ hard **5-second timeout** and a realistic browser `User-Agent`. The API returns:
   available, valid account taken.
 - **YouTube** — `GET youtube.com/@{u}` → `404` available, channel page taken.
   Guards against soft-`200` error pages.
+- **Domains** — DNS checks for `.com`, `.ai`, `.io`, `.net`, and `.co`.
 
 **Tier B — best-effort/manual checks** (TikTok, X, Instagram, Threads, Twitch,
 Facebook, Snapchat, Pinterest, LinkedIn, Steam, Spotify, SoundCloud, Roblox,

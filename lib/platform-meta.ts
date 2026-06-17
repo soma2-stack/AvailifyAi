@@ -10,7 +10,7 @@ export type PlatformMeta = {
 
 export type DomainMeta = {
   name: string;
-  extension: ".com" | ".io";
+  extension: ".com" | ".ai" | ".io" | ".net" | ".co";
   initials: string;
 };
 
@@ -167,5 +167,8 @@ export const PLATFORM_META: PlatformMeta[] = [
 
 export const DOMAIN_META: DomainMeta[] = [
   { name: "Domain .com", extension: ".com", initials: ".com" },
+  { name: "Domain .ai", extension: ".ai", initials: ".ai" },
   { name: "Domain .io", extension: ".io", initials: ".io" },
+  { name: "Domain .net", extension: ".net", initials: ".net" },
+  { name: "Domain .co", extension: ".co", initials: ".co" },
 ];

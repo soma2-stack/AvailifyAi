@@ -350,7 +350,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 }
 
 async function checkDomain(
-  extension: ".com" | ".io",
+  extension: ".com" | ".ai" | ".io" | ".net" | ".co",
   username: string
 ): Promise<CheckResult> {
   const label = username.toLowerCase();
@@ -381,12 +381,36 @@ const domainCom: PlatformAdapter = {
   check: (u) => checkDomain(".com", u),
 };
 
+const domainAi: PlatformAdapter = {
+  name: "Domain .ai",
+  tier: "A",
+  profileUrl: (u) => `https://www.whois.com/whois/${enc(`${u.toLowerCase()}.ai`)}`,
+  validate: domainLabelOk,
+  check: (u) => checkDomain(".ai", u),
+};
+
 const domainIo: PlatformAdapter = {
   name: "Domain .io",
   tier: "A",
   profileUrl: (u) => `https://www.whois.com/whois/${enc(`${u.toLowerCase()}.io`)}`,
   validate: domainLabelOk,
   check: (u) => checkDomain(".io", u),
+};
+
+const domainNet: PlatformAdapter = {
+  name: "Domain .net",
+  tier: "A",
+  profileUrl: (u) => `https://www.whois.com/whois/${enc(`${u.toLowerCase()}.net`)}`,
+  validate: domainLabelOk,
+  check: (u) => checkDomain(".net", u),
+};
+
+const domainCo: PlatformAdapter = {
+  name: "Domain .co",
+  tier: "A",
+  profileUrl: (u) => `https://www.whois.com/whois/${enc(`${u.toLowerCase()}.co`)}`,
+  validate: domainLabelOk,
+  check: (u) => checkDomain(".co", u),
 };
 
 /** Registry, in display order. */
@@ -413,7 +437,10 @@ export const adapters: PlatformAdapter[] = [
   gitlab,
   discord,
   domainCom,
+  domainAi,
   domainIo,
+  domainNet,
+  domainCo,
 ];
 
 export { USER_AGENT };
