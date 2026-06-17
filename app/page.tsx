@@ -1,27 +1,43 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent, useMemo, useRef, useState } from "react";
 import { DOMAIN_META, PLATFORM_META } from "@/lib/platform-meta";
 import type { CheckResult, Status } from "@/lib/types";
 
 type Phase = "idle" | "loading" | "done" | "error";
 
 const BRAND_NAME = "AvailifyAi";
+const SUPPORT_EMAIL = "support@availifyai.com";
+const LAST_UPDATED = "June 17, 2026";
+// Paste your Stripe Payment Links into .env.local using the matching
+// NEXT_PUBLIC_ variables from .env.example. Do not use secret Stripe keys here.
+const STRIPE_PRO_PAYMENT_LINK =
+  process.env.NEXT_PUBLIC_STRIPE_PRO_PAYMENT_LINK ?? "";
+const STRIPE_BUSINESS_PAYMENT_LINK =
+  process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PAYMENT_LINK ?? "";
 const PRIMARY_PLATFORM_COUNT = 8;
 const FREE_SEARCH_LIMIT = 3;
 const BULK_SEARCH_LIMIT = 20;
 const SUGGESTION_CHIPS = ["availifyai", "neonforge", "brandpilot", "creatorhq"];
 const FREE_TIER_FEATURES = [
   "3 searches total",
-  "Basic availability check only",
+  "Basic availability checks",
   ".com domain check",
+  "Manual check links",
 ];
 const PRO_TIER_FEATURES = [
   "Unlimited searches",
-  "AI Name Assistant",
-  "Bulk Domain Checker for up to 20 names",
-  "Instant .com, .ai, .io, .net, and .co checks",
-  "Watchlist and availability alerts",
+  "AI name assistant",
+  "Bulk checker up to 20 names",
+  ".com, .ai, .io, .net, and .co checks",
+  "Watchlist and alerts",
+];
+const BUSINESS_TIER_FEATURES = [
+  "Everything in Pro",
+  "More advanced brand reports",
+  "Higher limits",
+  "Team-friendly use",
+  "Priority support",
 ];
 const AI_ASSISTANT_PROMPTS = [
   "Shorten it for a cleaner brand",
@@ -411,6 +427,77 @@ function FeatureCheckList({ items }: { items: string[] }) {
   );
 }
 
+function PricingCard({
+  eyebrow,
+  title,
+  price,
+  description,
+  features,
+  cta,
+  href,
+  featured = false,
+  onClick,
+}: {
+  eyebrow: string;
+  title: string;
+  price: string;
+  description: string;
+  features: string[];
+  cta: string;
+  href: string;
+  featured?: boolean;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  return (
+    <article
+      className={`relative flex h-full flex-col rounded-[28px] border p-6 ${
+        featured
+          ? "border-[#5b8cff]/45 bg-[#5b8cff]/10 shadow-[0_40px_100px_-45px_rgba(91,140,255,0.55)]"
+          : "border-white/10 bg-white/[0.035]"
+      }`}
+    >
+      {featured && (
+        <span className="mb-5 inline-flex w-fit items-center rounded-full border border-white/15 bg-black/25 px-4 py-2 text-xs font-black text-white">
+          Best value
+        </span>
+      )}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div
+            className={`text-xs font-black uppercase ${
+              featured ? "text-[#8fb0ff]" : "text-[#9298ad]"
+            }`}
+          >
+            {eyebrow}
+          </div>
+          <h3 className="mt-2 text-2xl font-black text-white">{title}</h3>
+        </div>
+        <div className="text-right">
+          <span className={featured ? "text-5xl font-black text-white" : "text-4xl font-black text-white"}>
+            {price}
+          </span>
+          <span className="block text-sm font-bold text-[#7e859b]">/month</span>
+        </div>
+      </div>
+      <p className="mt-4 text-sm leading-6 text-[#9298ad]">{description}</p>
+      <FeatureCheckList items={features} />
+      <a
+        href={href}
+        target={href.startsWith("http") ? "_blank" : undefined}
+        rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
+        onClick={onClick}
+        className={`mt-7 flex min-h-12 items-center justify-center rounded-2xl px-5 text-sm font-black ${
+          featured
+            ? "bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] text-[#07080f]"
+            : "border border-white/15 bg-white/[0.05] text-white hover:border-white/30"
+        }`}
+      >
+        {cta}
+      </a>
+    </article>
+  );
+}
+
 function TldGrid({
   displayHandle,
   isSubscribed,
@@ -517,6 +604,8 @@ export default function Home() {
   const [searchCount, setSearchCount] = useState(0);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [bulkQueue, setBulkQueue] = useState<string[]>([]);
+  const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
+  const [contactSent, setContactSent] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const resultByName = useMemo(
@@ -662,6 +751,28 @@ export default function Home() {
     });
   }
 
+  function handlePaymentClick(
+    event: MouseEvent<HTMLAnchorElement>,
+    plan: "Pro" | "Business",
+    href: string
+  ) {
+    if (href) return;
+    event.preventDefault();
+    setPaymentNotice(
+      `${plan} payment link not configured yet. Add the Stripe Payment Link in .env.local, then redeploy.`
+    );
+    document
+      .getElementById("pricing")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function onContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    // Connect this to Formspree, EmailJS, Resend, or a custom Next.js API route later.
+    setContactSent(true);
+    event.currentTarget.reset();
+  }
+
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[#07080f] text-[#f2f4fb]">
       <div
@@ -679,7 +790,7 @@ export default function Home() {
         <a href="#search" className="shrink-0">
           <Logo />
         </a>
-        <nav className="hidden items-center gap-7 text-sm font-semibold text-[#aab0c4] md:flex">
+        <nav className="hidden items-center gap-5 text-sm font-semibold text-[#aab0c4] md:flex lg:gap-7">
           <a className="hover:text-white" href="#features">
             Features
           </a>
@@ -688,6 +799,12 @@ export default function Home() {
           </a>
           <a className="hover:text-white" href="#pricing">
             Pricing
+          </a>
+          <a className="hover:text-white" href="#privacy">
+            Privacy
+          </a>
+          <a className="hover:text-white" href="#contact">
+            Contact
           </a>
           <a className="hover:text-white" href="#faq">
             FAQ
@@ -1219,113 +1336,224 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <article className="rounded-[28px] border border-white/10 bg-white/[0.035] p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-xs font-black uppercase text-[#9298ad]">
-                  Free Tier
-                </div>
-                <h3 className="mt-2 text-2xl font-black text-white">Basic</h3>
-              </div>
-              <div className="text-right">
-                <span className="text-4xl font-black text-white">$0</span>
-                <span className="text-sm font-bold text-[#7e859b]">/mo</span>
-              </div>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-[#9298ad]">
-              Enough to test a few ideas, with a hard limit that makes the Pro
-              upgrade clear.
-            </p>
-            <FeatureCheckList items={FREE_TIER_FEATURES} />
-            <a
-              href="#search"
-              className="mt-7 flex min-h-12 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.05] px-5 text-sm font-black text-white hover:border-white/30"
+        {paymentNotice && (
+          <div className="mb-5 rounded-2xl border border-[#ffc24d]/35 bg-[#33250b] px-5 py-4 text-sm font-semibold text-[#ffd982]">
+            {paymentNotice}
+          </div>
+        )}
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <PricingCard
+            eyebrow="Free"
+            title="Free"
+            price="$0"
+            description="A focused starter plan for testing a few name ideas before committing."
+            features={FREE_TIER_FEATURES}
+            cta="Start Free"
+            href="#search"
+          />
+          <PricingCard
+            eyebrow="Pro"
+            title="Pro"
+            price="$10"
+            description="The serious naming workspace for creators, founders, and builders."
+            features={PRO_TIER_FEATURES}
+            cta="Upgrade to Pro"
+            href={STRIPE_PRO_PAYMENT_LINK || "#pricing"}
+            featured
+            onClick={(event) =>
+              handlePaymentClick(event, "Pro", STRIPE_PRO_PAYMENT_LINK)
+            }
+          />
+          <PricingCard
+            eyebrow="Business"
+            title="Business"
+            price="$29"
+            description="More room and support for teams comparing names across client or product work."
+            features={BUSINESS_TIER_FEATURES}
+            cta="Choose Business"
+            href={STRIPE_BUSINESS_PAYMENT_LINK || "#pricing"}
+            onClick={(event) =>
+              handlePaymentClick(
+                event,
+                "Business",
+                STRIPE_BUSINESS_PAYMENT_LINK
+              )
+            }
+          />
+        </div>
+      </section>
+
+      <section
+        id="privacy"
+        className="relative z-10 mx-auto max-w-[1160px] px-6 py-16"
+      >
+        <div className="mb-10 text-center">
+          <div className="mb-3 text-xs font-black uppercase text-[#5b8cff]">
+            Privacy
+          </div>
+          <h2 className="text-3xl font-black text-white [text-wrap:balance] sm:text-4xl">
+            Privacy Policy
+          </h2>
+          <p className="mx-auto mt-4 max-w-[58ch] leading-7 text-[#aab0c4]">
+            Last updated: {LAST_UPDATED}. This starter policy explains how
+            AvailifyAi handles information while you search and compare names.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            [
+              "Information we collect",
+              "We may collect search inputs, basic usage data, contact form details, and account information if subscriptions are added.",
+            ],
+            [
+              "How we use information",
+              "We use information to run availability checks, improve the product, respond to messages, prevent abuse, and support subscriptions.",
+            ],
+            [
+              "Search inputs",
+              "Names or handles you search may be sent to third-party platforms and domain services so AvailifyAi can check availability.",
+            ],
+            [
+              "Account and payments",
+              "If paid plans are enabled, account and payment information may be processed by third-party payment providers such as Stripe.",
+            ],
+            [
+              "Cookies and analytics",
+              "We may use cookies or analytics tools to understand product usage, measure performance, and improve the experience.",
+            ],
+            [
+              "Third-party services",
+              "Availability checks, analytics, hosting, and payments may rely on third-party services with their own privacy practices.",
+            ],
+            [
+              "Data security",
+              "We use reasonable technical and organizational safeguards, but no internet service can guarantee perfect security.",
+            ],
+            [
+              "User rights",
+              "You can contact us to request access, correction, or deletion of personal information where applicable.",
+            ],
+          ].map(([title, body]) => (
+            <article
+              key={title}
+              className="rounded-[22px] border border-white/10 bg-white/[0.04] p-6"
             >
-              Try 3 Searches
+              <h3 className="text-lg font-black text-white">{title}</h3>
+              <p className="mt-3 text-sm leading-7 text-[#9298ad]">{body}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-[22px] border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-6">
+          <h3 className="text-lg font-black text-white">Contact</h3>
+          <p className="mt-3 text-sm leading-7 text-[#c2c7d8]">
+            For privacy questions or requests, contact{" "}
+            <a
+              className="font-black text-[#8fb0ff] hover:text-white"
+              href={`mailto:${SUPPORT_EMAIL}`}
+            >
+              {SUPPORT_EMAIL}
             </a>
-          </article>
+            .
+          </p>
+        </div>
+      </section>
 
-          <article className="relative overflow-hidden rounded-[28px] border border-[#5b8cff]/45 bg-[#5b8cff]/10 p-6 shadow-[0_40px_100px_-45px_rgba(91,140,255,0.55)]">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-4 py-2 text-xs font-black text-white">
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-[#5b8cff] to-[#9b7bff] text-xs text-[#07080f]">
-                ★
-              </span>
-              Best value
+      <section
+        id="contact"
+        className="relative z-10 mx-auto max-w-[1160px] px-6 py-16"
+      >
+        <div className="grid gap-8 rounded-[30px] border border-white/10 bg-white/[0.04] p-6 sm:p-10 lg:grid-cols-[0.9fr_1.1fr]">
+          <div>
+            <div className="mb-3 text-xs font-black uppercase text-[#5b8cff]">
+              Contact
             </div>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="text-xs font-black uppercase text-[#8fb0ff]">
-                  Pro Tier
-                </div>
-                <h3 className="mt-2 text-3xl font-black text-white">
-                  AvailifyAi Pro
-                </h3>
-              </div>
-              <div className="sm:text-right">
-                <span className="text-5xl font-black text-white">$10</span>
-                <span className="text-sm font-bold text-[#c2c7d8]">/mo</span>
-              </div>
-            </div>
-            <p className="mt-4 max-w-[56ch] leading-7 text-[#c2c7d8]">
-              Unlimited searches, AI naming help, bulk domain checking, premium
-              TLD coverage, and a watchlist built for real brand decisions.
+            <h2 className="text-3xl font-black text-white [text-wrap:balance] sm:text-4xl">
+              Tell us what you are building.
+            </h2>
+            <p className="mt-4 leading-7 text-[#aab0c4]">
+              For support, business questions, or feedback, contact us at{" "}
+              <a
+                className="font-black text-[#8fb0ff] hover:text-white"
+                href={`mailto:${SUPPORT_EMAIL}`}
+              >
+                {SUPPORT_EMAIL}
+              </a>
+              .
             </p>
-            <FeatureCheckList items={PRO_TIER_FEATURES} />
-            <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href="#search"
-                className="rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 py-3 text-sm font-black text-[#07080f]"
-              >
-                Upgrade to Pro
-              </a>
-              <a
-                href="#features"
-                className="rounded-2xl border border-white/15 bg-white/[0.06] px-6 py-3 text-sm font-bold text-white"
-              >
-                Compare Features
-              </a>
+            <div className="mt-6 rounded-2xl border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-5">
+              <div className="text-sm font-black text-white">Fastest path</div>
+              <p className="mt-2 text-sm leading-6 text-[#c2c7d8]">
+                Send your question, pricing request, or feature idea and we will
+                route it to the right place.
+              </p>
             </div>
+          </div>
 
-            <div className="mt-6 rounded-[22px] border border-white/10 bg-black/30 p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-sm font-black text-white">Pro workspace</span>
-                <span className="text-xs font-bold text-[#8fb0ff]">Unlocked</span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                  <div className="text-xs font-black uppercase text-[#7e859b]">
-                    Bulk checker
-                  </div>
-                  <div className="mt-2 text-2xl font-black text-white">20</div>
-                  <div className="text-xs text-[#9298ad]">names per batch</div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                  <div className="text-xs font-black uppercase text-[#7e859b]">
-                    Premium TLDs
-                  </div>
-                  <div className="mt-2 font-mono text-sm font-black text-white">
-                    .com .ai .io .net .co
-                  </div>
-                  <div className="mt-1 text-xs text-[#9298ad]">parallel checks</div>
-                </div>
-              </div>
-              <div className="my-4 h-px bg-white/10" />
-              <div className="space-y-2">
-                {alternatives.slice(0, 3).map((item) => (
-                  <div
-                    key={item.name}
-                    className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3"
-                  >
-                    <span className="min-w-0 truncate font-mono text-sm text-white">
-                      {item.name}
-                    </span>
-                    <span className="font-black text-[#6fe9b4]">{item.score}</span>
-                  </div>
-                ))}
-              </div>
+          <form onSubmit={onContactSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-black uppercase text-[#7e859b]">
+                  Name
+                </span>
+                <input
+                  required
+                  name="name"
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                  placeholder="Your name"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-black uppercase text-[#7e859b]">
+                  Email
+                </span>
+                <input
+                  required
+                  name="email"
+                  type="email"
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                  placeholder="you@example.com"
+                />
+              </label>
             </div>
-          </article>
+            <label className="block">
+              <span className="text-xs font-black uppercase text-[#7e859b]">
+                Subject
+              </span>
+              <input
+                required
+                name="subject"
+                className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-black/25 px-4 text-sm text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                placeholder="How can we help?"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-black uppercase text-[#7e859b]">
+                Message
+              </span>
+              <textarea
+                required
+                name="message"
+                rows={5}
+                className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                placeholder="Share a few details..."
+              />
+            </label>
+            <button
+              type="submit"
+              className="min-h-12 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 text-sm font-black text-[#07080f]"
+            >
+              Send Message
+            </button>
+            {contactSent && (
+              <div className="rounded-2xl border border-[#46e0a0]/35 bg-[#46e0a0]/10 px-4 py-3 text-sm font-semibold text-[#6fe9b4]">
+                Thanks. Your message is ready for delivery once a contact
+                provider is connected.
+              </div>
+            )}
+          </form>
         </div>
       </section>
 
@@ -1378,14 +1606,14 @@ export default function Home() {
               Find your name before it disappears.
             </p>
           </div>
-          <div className="flex gap-6 text-sm text-[#aab0c4]">
-            <a className="hover:text-white" href="#search">
+          <div className="flex flex-wrap gap-6 text-sm text-[#aab0c4]">
+            <a className="hover:text-white" href="#pricing">
+              Pricing
+            </a>
+            <a className="hover:text-white" href="#privacy">
               Privacy
             </a>
-            <a className="hover:text-white" href="#search">
-              Terms
-            </a>
-            <a className="hover:text-white" href="#search">
+            <a className="hover:text-white" href="#contact">
               Contact
             </a>
           </div>
