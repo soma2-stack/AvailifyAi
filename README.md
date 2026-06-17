@@ -1,8 +1,8 @@
-# handle-check
+# AvailifyAi
 
 A fast, mobile-first **username availability checker**. Type a handle once and
-see whether it's free across GitHub, Reddit, YouTube, TikTok, X, Instagram,
-Threads, and Twitch — all checked concurrently.
+see whether it's free across major social apps, creator platforms, developer
+sites, and matching domains.
 
 Built with **Next.js (App Router) + TypeScript + Tailwind CSS**. No database,
 deploys to Vercel with zero configuration.
@@ -44,10 +44,13 @@ hard **5-second timeout** and a realistic browser `User-Agent`. The API returns:
 - **YouTube** — `GET youtube.com/@{u}` → `404` available, channel page taken.
   Guards against soft-`200` error pages.
 
-**Tier B — best-effort** (TikTok, X, Instagram, Threads, Twitch): these
-platforms aggressively block automated requests. The checker **never guesses** —
-if a request is blocked, rate-limited, or ambiguous it returns `unknown` so you
-can verify manually via the profile link.
+**Tier B — best-effort/manual checks** (TikTok, X, Instagram, Threads, Twitch,
+Facebook, Snapchat, Pinterest, LinkedIn, Steam, Spotify, SoundCloud, Roblox,
+Telegram, Medium, Substack, GitLab, and Discord): these platforms often block
+automated requests or do not expose reliable public username APIs. The checker
+**never guesses** — if a request is blocked, rate-limited, ambiguous, or needs an
+in-app lookup, it returns `unknown` so you can verify manually via the profile
+link.
 
 - **Twitch** is a *real* check when `TWITCH_CLIENT_ID` and
   `TWITCH_CLIENT_SECRET` are set (via the Helix API); otherwise it returns

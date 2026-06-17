@@ -1,8 +1,8 @@
 {
-  "name": "handle-check",
+  "name": "availify-ai",
   "version": "1.0.0",
   "private": true,
-  "description": "Check username availability across platforms.",
+  "description": "Check username availability across apps, platforms, and domains.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

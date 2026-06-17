@@ -6,26 +6,28 @@ import type { CheckResult, Status } from "@/lib/types";
 
 type Phase = "idle" | "loading" | "done" | "error";
 
-const SUGGESTION_CHIPS = ["gamerwolf", "dannyplays", "neonforge", "zentok"];
+const BRAND_NAME = "AvailifyAi";
+const PRIMARY_PLATFORM_COUNT = 8;
+const SUGGESTION_CHIPS = ["availifyai", "neonforge", "brandpilot", "creatorhq"];
 
 const FEATURES = [
   {
-    icon: "⚡",
+    icon: "AI",
     title: "Multi-platform checks",
-    body: "Quickly see where your name is available, taken, or needs manual verification across 8 platforms at once.",
+    body: "Quickly see where your name is available, taken, or needs manual verification across popular apps and domains.",
   },
   {
-    icon: "◎",
+    icon: "99",
     title: "Name strength score",
     body: "A simple score based on length, readability, availability, and brand potential.",
   },
   {
-    icon: "✦",
+    icon: "+",
     title: "Smart alternatives",
     body: "When your first choice is taken, get stronger variations tagged by use case.",
   },
   {
-    icon: "◆",
+    icon: ".com",
     title: "Brand-ready results",
     body: "Find matching domains, social handles, and creator-friendly name options in one focused view.",
   },
@@ -35,7 +37,7 @@ const FAQS = [
   {
     question: "Can every platform be checked automatically?",
     answer:
-      "Not always. GitHub, Reddit, YouTube, domains, and Twitch with credentials support reliable checks. Platforms like TikTok and Instagram often block automated lookups, so NameNotTaken marks those Manual Check Needed instead of guessing.",
+      "Not always. GitHub, Reddit, YouTube, domains, and Twitch with credentials support reliable checks. Platforms like TikTok, Instagram, Facebook, and Discord often block automated lookups, so AvailifyAi marks those Manual Check Needed instead of guessing.",
   },
   {
     question: 'Why do some platforms say "Manual Check Needed"?',
@@ -43,7 +45,7 @@ const FAQS = [
       "Some sites block server-side lookups or need a browser to render content. The Open link takes you to the real profile page so you can confirm directly.",
   },
   {
-    question: "Is NameNotTaken free?",
+    question: "Is AvailifyAi free?",
     answer:
       "Yes. Core checks across the supported platforms and domains run without an account.",
   },
@@ -123,7 +125,7 @@ function makeAlternatives(handle: string): Array<{
   score: number;
 }> {
   const clean = handle.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const base = clean || "neonforge";
+  const base = clean || "availifyai";
   const candidates = [
     { name: `${base}hq`, tag: "Best overall", bump: 8 },
     { name: `real${base}`, tag: "Creator-friendly", bump: 4 },
@@ -168,10 +170,40 @@ function Logo({ size = "md" }: { size?: "sm" | "md" }) {
               : "font-mono text-xl font-black text-[#07080f]"
           }
         >
-          N
+          A
         </span>
       </div>
-      <span className="text-base font-bold text-white">NameNotTaken</span>
+      <span className="text-base font-bold text-white">{BRAND_NAME}</span>
+    </div>
+  );
+}
+
+function PlatformLogo({
+  initials,
+  iconDomain,
+  name,
+}: {
+  initials: string;
+  iconDomain: string;
+  name: string;
+}) {
+  return (
+    <div
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/25"
+      title={`${name} logo`}
+    >
+      <span className="font-mono text-xs font-bold text-[#cdd2e2]">
+        {initials}
+      </span>
+      <span
+        className="absolute inset-2 rounded-sm bg-contain bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `url("https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+            iconDomain
+          )}&sz=64")`,
+        }}
+        aria-hidden
+      />
     </div>
   );
 }
@@ -212,12 +244,14 @@ function StatusBadge({
 
 function PlatformRow({
   initials,
+  iconDomain,
   name,
   url,
   result,
   loading,
 }: {
   initials: string;
+  iconDomain: string;
   name: string;
   url: string;
   result?: CheckResult;
@@ -232,9 +266,7 @@ function PlatformRow({
         result ? view?.border : "border-white/10"
       }`}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/25 font-mono text-xs font-bold text-[#cdd2e2]">
-        {initials}
-      </div>
+      <PlatformLogo initials={initials} iconDomain={iconDomain} name={name} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
@@ -324,13 +356,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [checked, setChecked] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [showAllPlatforms, setShowAllPlatforms] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const resultByName = useMemo(
     () => new Map(results.map((result) => [result.platform, result])),
     [results]
   );
-  const displayHandle = checked || normalizeInput(username) || "neonforge";
+  const displayHandle = checked || normalizeInput(username) || "availifyai";
   const score = scoreName(displayHandle, results);
   const alternatives = useMemo(
     () => makeAlternatives(displayHandle),
@@ -342,6 +375,13 @@ export default function Home() {
   const bestAlternative = alternatives[0];
   const isLoading = phase === "loading";
   const hasSearched = phase !== "idle" || results.length > 0 || Boolean(error);
+  const visiblePlatforms = showAllPlatforms
+    ? PLATFORM_META
+    : PLATFORM_META.slice(0, PRIMARY_PLATFORM_COUNT);
+  const hiddenPlatformCount = Math.max(
+    0,
+    PLATFORM_META.length - PRIMARY_PLATFORM_COUNT
+  );
 
   async function runCheck(value: string) {
     const handle = normalizeInput(value);
@@ -472,7 +512,7 @@ export default function Home() {
       >
         <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-[#c2c7d8]">
           <span className="h-2 w-2 rounded-full bg-[#46e0a0] shadow-[0_0_12px_rgba(70,224,160,0.8)]" />
-          Live checks across 8 platforms + domains
+          Live checks across {PLATFORM_META.length} apps + domains
         </div>
         <h1 className="mx-auto max-w-[15ch] text-[40px] font-black leading-[1.04] text-white [text-wrap:balance] sm:text-[64px] lg:text-[72px]">
           Find the perfect online name before someone else takes it.
@@ -500,7 +540,7 @@ export default function Home() {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder="neonforge"
+                placeholder="availifyai"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 className="h-14 w-full rounded-2xl border border-transparent bg-transparent pl-10 pr-4 font-mono text-lg text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
@@ -511,7 +551,7 @@ export default function Home() {
               disabled={isLoading || !normalizeInput(username)}
               className="h-14 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-7 text-base font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.28)] transition disabled:cursor-not-allowed disabled:opacity-55"
             >
-              {isLoading ? "Checking..." : "Check Name ↗"}
+              {isLoading ? "Checking..." : "Check Name"}
             </button>
           </div>
         </form>
@@ -601,10 +641,11 @@ export default function Home() {
           )}
 
           <ul className="flex flex-col gap-2">
-            {PLATFORM_META.map((platform) => (
+            {visiblePlatforms.map((platform) => (
               <PlatformRow
                 key={platform.name}
                 initials={platform.initials}
+                iconDomain={platform.iconDomain}
                 name={platform.name}
                 url={platform.displayUrl(displayHandle)}
                 result={resultByName.get(platform.name)}
@@ -612,6 +653,20 @@ export default function Home() {
               />
             ))}
           </ul>
+
+          {hiddenPlatformCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllPlatforms((open) => !open)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-black text-[#8fb0ff] hover:border-[#5b8cff]/50 hover:text-white"
+              aria-expanded={showAllPlatforms}
+            >
+              {showAllPlatforms
+                ? "Show fewer apps"
+                : `View more apps (${hiddenPlatformCount})`}
+              <span aria-hidden>{showAllPlatforms ? "-" : "+"}</span>
+            </button>
+          )}
 
           <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
             <div className="mb-3 text-sm font-black text-white">Domains</div>
@@ -786,7 +841,7 @@ export default function Home() {
               Pro
             </div>
             <h2 className="text-3xl font-black text-white sm:text-4xl">
-              NameNotTaken Pro
+              AvailifyAi Pro
             </h2>
             <p className="mt-4 max-w-[42ch] leading-7 text-[#c2c7d8]">
               Save your searches, compare names, export a full brand report,

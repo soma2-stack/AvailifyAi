@@ -261,6 +261,60 @@ const twitch: PlatformAdapter = {
 };
 
 /* -------------------------------------------------------------------------- */
+/*  Manual-check platforms                                                     */
+/* -------------------------------------------------------------------------- */
+
+const genericHandleOk = (u: string) =>
+  u.length >= 1 && u.length <= 40 && /^[a-zA-Z0-9._-]+$/.test(u);
+
+const subdomainLabelOk = (u: string) =>
+  u.length >= 1 &&
+  u.length <= 63 &&
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(u);
+
+function manualPlatform(
+  name: string,
+  profileUrl: (username: string) => string,
+  validate: (username: string) => boolean = genericHandleOk,
+  reason = "manual check"
+): PlatformAdapter {
+  return {
+    name,
+    tier: "B",
+    profileUrl,
+    validate,
+    check: async (u) =>
+      result(name, "unknown", "manual", profileUrl(u), reason),
+  };
+}
+
+const facebook = manualPlatform("Facebook", (u) => `https://www.facebook.com/${u}`);
+const snapchat = manualPlatform("Snapchat", (u) => `https://www.snapchat.com/add/${u}`);
+const pinterest = manualPlatform("Pinterest", (u) => `https://www.pinterest.com/${u}`);
+const linkedin = manualPlatform("LinkedIn", (u) => `https://www.linkedin.com/in/${u}`);
+const steam = manualPlatform("Steam", (u) => `https://steamcommunity.com/id/${u}`);
+const spotify = manualPlatform("Spotify", (u) => `https://open.spotify.com/user/${u}`);
+const soundcloud = manualPlatform("SoundCloud", (u) => `https://soundcloud.com/${u}`);
+const roblox = manualPlatform(
+  "Roblox",
+  (u) => `https://www.roblox.com/users/profile?username=${enc(u)}`
+);
+const telegram = manualPlatform("Telegram", (u) => `https://t.me/${u}`);
+const medium = manualPlatform("Medium", (u) => `https://medium.com/@${u}`);
+const substack = manualPlatform(
+  "Substack",
+  (u) => `https://${u.toLowerCase()}.substack.com`,
+  subdomainLabelOk
+);
+const gitlab = manualPlatform("GitLab", (u) => `https://gitlab.com/${u}`);
+const discord = manualPlatform(
+  "Discord",
+  () => "https://discord.com/",
+  genericHandleOk,
+  "search inside Discord"
+);
+
+/* -------------------------------------------------------------------------- */
 /*  Domains                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -345,6 +399,19 @@ export const adapters: PlatformAdapter[] = [
   instagram,
   threads,
   twitch,
+  facebook,
+  snapchat,
+  pinterest,
+  linkedin,
+  steam,
+  spotify,
+  soundcloud,
+  roblox,
+  telegram,
+  medium,
+  substack,
+  gitlab,
+  discord,
   domainCom,
   domainIo,
 ];

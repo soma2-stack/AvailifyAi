@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NameNotTaken - username availability checker",
+  title: "AvailifyAi - username availability checker",
   description:
-    "Check whether a username is available across social platforms and domains.",
+    "Check whether a username is available across popular apps, social platforms, and domains.",
 };
 
 export const viewport: Viewport = {
