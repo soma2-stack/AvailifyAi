@@ -23,6 +23,59 @@ deploys to Vercel with zero configuration.
 - Instant TLD checks for .com, .ai, .io, .net, and .co.
 - Watchlist and alerts for saved favorite names.
 
+**Business ($29/mo)**
+
+- Everything in Pro.
+- More advanced brand reports.
+- Higher limits.
+- Team-friendly use.
+- Priority support.
+
+---
+
+## Payments (Stripe Payment Links)
+
+Paid tiers use **Stripe Payment Links** — there is no backend, no database, and
+**no secret API key** anywhere in this app. You create the links in your Stripe
+dashboard and paste the public URLs into the environment.
+
+> ⚠️ Never put a secret Stripe key (`sk_…`) in this repo, in `.env`, or in chat.
+> Only the public `https://buy.stripe.com/…` Payment Links belong here.
+
+**One-time setup:**
+
+1. In the [Stripe Dashboard](https://dashboard.stripe.com/), create two
+   **Products** with recurring monthly prices: **Pro** ($10/mo) and
+   **Business** ($29/mo).
+2. For each product, create a **Payment Link** (Product → **Create payment
+   link**). Copy the resulting `https://buy.stripe.com/…` URL.
+3. *(Optional but recommended)* In each Payment Link's settings, set the
+   **confirmation page** to redirect to your deployed success page:
+   - Pro → `https://YOUR_DOMAIN/success?plan=pro`
+   - Business → `https://YOUR_DOMAIN/success?plan=business`
+4. Add the two links to your environment:
+
+   ```bash
+   # .env.local for local dev — see .env.example
+   NEXT_PUBLIC_STRIPE_PRO_PAYMENT_LINK=https://buy.stripe.com/xxxxxxxxPro
+   NEXT_PUBLIC_STRIPE_BUSINESS_PAYMENT_LINK=https://buy.stripe.com/xxxxxxxxBiz
+   ```
+
+   On Vercel, add the same two variables under **Settings → Environment
+   Variables**, then redeploy.
+
+Until the links are set, the Pro/Business buttons show a friendly "not
+configured yet" notice instead of breaking. The plan config lives in
+[`lib/billing.ts`](lib/billing.ts); the post-checkout page is
+[`app/success/page.tsx`](app/success/page.tsx).
+
+> **Note on what this does and doesn't do:** Payment Links collect payment and
+> email the customer a receipt and a self-serve billing portal. They do **not**
+> automatically unlock Pro features per logged-in user — this app has no
+> accounts or database, and the Free/Pro toggle on the page is a UI preview.
+> Gating real features behind a verified payment would require adding auth, a
+> backend, Stripe webhooks, and a database.
+
 ---
 
 ## How it works

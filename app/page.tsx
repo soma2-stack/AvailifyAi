@@ -2,6 +2,10 @@
 
 import { FormEvent, MouseEvent, useMemo, useRef, useState } from "react";
 import { DOMAIN_META, PLATFORM_META } from "@/lib/platform-meta";
+import {
+  STRIPE_BUSINESS_PAYMENT_LINK,
+  STRIPE_PRO_PAYMENT_LINK,
+} from "@/lib/billing";
 import type { CheckResult, Status } from "@/lib/types";
 
 type Phase = "idle" | "loading" | "done" | "error";
@@ -9,12 +13,8 @@ type Phase = "idle" | "loading" | "done" | "error";
 const BRAND_NAME = "AvailifyAi";
 const SUPPORT_EMAIL = "support@availifyai.com";
 const LAST_UPDATED = "June 17, 2026";
-// Paste your Stripe Payment Links into .env.local using the matching
-// NEXT_PUBLIC_ variables from .env.example. Do not use secret Stripe keys here.
-const STRIPE_PRO_PAYMENT_LINK =
-  process.env.NEXT_PUBLIC_STRIPE_PRO_PAYMENT_LINK ?? "";
-const STRIPE_BUSINESS_PAYMENT_LINK =
-  process.env.NEXT_PUBLIC_STRIPE_BUSINESS_PAYMENT_LINK ?? "";
+// Stripe Payment Links come from lib/billing.ts, which reads the NEXT_PUBLIC_
+// env vars listed in .env.example. Do not use secret Stripe keys here.
 const PRIMARY_PLATFORM_COUNT = 8;
 const FREE_SEARCH_LIMIT = 3;
 const BULK_SEARCH_LIMIT = 20;
