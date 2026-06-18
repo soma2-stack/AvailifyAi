@@ -43,7 +43,7 @@ export function LoadingRow({ name }: { name: string }) {
           className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-400"
           aria-hidden
         />
-        <span>Checking…</span>
+        <span>Checking...</span>
       </span>
     </Row>
   );
@@ -63,7 +63,7 @@ export function ResultRow({ result }: { result: CheckResult }) {
         <span className="font-medium text-neutral-100">{result.platform}</span>
         <span className="block truncate text-xs text-neutral-500">
           {result.checkedVia}
-          {result.reason ? ` · ${result.reason}` : ""}
+          {result.reason ? ` - ${result.reason}` : ""}
         </span>
       </div>
 
@@ -75,7 +75,7 @@ export function ResultRow({ result }: { result: CheckResult }) {
             rel="noopener noreferrer"
             className="rounded-lg px-2 py-1 text-sm font-medium text-sky-400 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
           >
-            Open&nbsp;↗
+            Open
           </a>
         )}
         <span

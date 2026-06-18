@@ -4,9 +4,9 @@ import type { CheckResult, PlatformAdapter } from "./types";
 
 /**
  * Run a single adapter safely:
- *  1. invalid handle  → "unknown" + "invalid format" (no network call)
- *  2. cache hit       → return cached result
- *  3. otherwise       → run the check, catching every error → "unknown"
+ *  1. invalid handle  -> "unknown" + "invalid format" (no network call)
+ *  2. cache hit       -> return cached result
+ *  3. otherwise       -> run the check, catching every error -> "unknown"
  */
 export async function runAdapter(
   adapter: PlatformAdapter,

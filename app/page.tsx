@@ -2,9 +2,23 @@
 
 import { FormEvent, MouseEvent, useMemo, useRef, useState } from "react";
 import { DOMAIN_META, PLATFORM_META } from "@/lib/platform-meta";
+import type { GeneratorResponse, NameIdea } from "@/lib/name-generator";
 import type { CheckResult, Status } from "@/lib/types";
 
 type Phase = "idle" | "loading" | "done" | "error";
+type BulkSummary = {
+  name: string;
+  score: number;
+  available: number;
+  taken: number;
+  manual: number;
+};
+
+type RunCheckOptions = {
+  syncInput?: boolean;
+  scroll?: boolean;
+  recordBulk?: boolean;
+};
 
 const BRAND_NAME = "AvailifyAi";
 const SUPPORT_EMAIL = "support@availifyai.com";
@@ -27,7 +41,7 @@ const FREE_TIER_FEATURES = [
 ];
 const PRO_TIER_FEATURES = [
   "Unlimited searches",
-  "AI name assistant",
+  "10-name AI business generator",
   "Bulk checker up to 20 names",
   ".com, .ai, .io, .net, and .co checks",
   "Watchlist and alerts",
@@ -44,12 +58,13 @@ const AI_ASSISTANT_PROMPTS = [
   "Find a stronger AI-focused angle",
   "Make it easier to pronounce",
 ];
+const GENERATOR_TONES = ["Modern", "Premium", "Playful", "Technical"];
 
 const FEATURES = [
   {
     icon: "AI",
-    title: "AI Name Assistant",
-    body: "Brainstorm stronger, more memorable names and see which direction is most brandable.",
+    title: "AI Business Name Generator",
+    body: "Turn a business brief into ranked, memorable names and check the strongest ideas immediately.",
   },
   {
     icon: "20",
@@ -62,7 +77,7 @@ const FEATURES = [
     body: "Compare .com, .ai, .io, .net, and .co side by side before you buy a domain.",
   },
   {
-    icon: "♥",
+    icon: "WL",
     title: "Watchlist & alerts",
     body: "Save favorite names and track them for availability changes as your shortlist evolves.",
   },
@@ -131,6 +146,8 @@ const STATUS_VIEW: Record<
 
 const READY_BADGE =
   "border-white/10 bg-white/[0.04] text-[#9298ad]";
+const SOFT_INTERACTION =
+  "transition hover:-translate-y-0.5 hover:border-[#5b8cff]/50";
 
 function normalizeInput(value: string): string {
   return value.trim().replace(/^@+/, "");
@@ -342,7 +359,7 @@ function PlatformRow({
         </div>
         <div className="mt-0.5 truncate text-xs text-[#7e859b]">
           {result?.reason && result.reason !== "invalid format"
-            ? `${url} · ${result.reason}`
+            ? `${url} - ${result.reason}`
             : url}
         </div>
       </div>
@@ -354,7 +371,7 @@ function PlatformRow({
             rel="noopener noreferrer"
             className="rounded-lg px-2 py-1 text-sm font-bold text-[#8fb0ff] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b8cff]"
           >
-            Open ↗
+            Open
           </a>
         )}
         <StatusBadge result={result} loading={loading} />
@@ -393,7 +410,7 @@ function DomainRow({
             rel="noopener noreferrer"
             className="rounded-lg px-2 py-1 text-sm font-bold text-[#8fb0ff] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5b8cff]"
           >
-            Whois ↗
+            Whois
           </a>
         )}
         <span
@@ -418,7 +435,7 @@ function FeatureCheckList({ items }: { items: string[] }) {
       {items.map((item) => (
         <li key={item} className="flex gap-3 text-sm font-semibold text-[#cdd2e2]">
           <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-[#46e0a0]/30 bg-[#46e0a0]/10 text-xs text-[#6fe9b4]">
-            ✓
+            OK
           </span>
           <span>{item}</span>
         </li>
@@ -604,6 +621,17 @@ export default function Home() {
   const [searchCount, setSearchCount] = useState(0);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [bulkQueue, setBulkQueue] = useState<string[]>([]);
+  const [bulkHistory, setBulkHistory] = useState<BulkSummary[]>([]);
+  const [assistantInsight, setAssistantInsight] = useState<string | null>(null);
+  const [generatorBrief, setGeneratorBrief] = useState("");
+  const [generatorAudience, setGeneratorAudience] = useState("");
+  const [generatorTone, setGeneratorTone] = useState("Modern");
+  const [generatedIdeas, setGeneratedIdeas] = useState<NameIdea[]>([]);
+  const [generatorSource, setGeneratorSource] = useState<
+    GeneratorResponse["source"] | null
+  >(null);
+  const [generatorLoading, setGeneratorLoading] = useState(false);
+  const [generatorError, setGeneratorError] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<string | null>(null);
   const [contactSent, setContactSent] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -635,14 +663,31 @@ export default function Home() {
   const remainingFreeSearches = Math.max(0, FREE_SEARCH_LIMIT - searchCount);
   const hasAvailableResult = results.some((result) => result.status === "available");
   const savedNames = new Set(watchlist.map((item) => item.toLowerCase()));
+  const activeBulkPosition = bulkQueue.findIndex(
+    (name) => name.toLowerCase() === displayHandle.toLowerCase()
+  );
+  const bulkProgress =
+    bulkQueue.length > 1
+      ? Math.min(
+          bulkQueue.length,
+          bulkHistory.length + (isLoading && activeBulkPosition >= 0 ? 1 : 0)
+        )
+      : 0;
 
-  async function runCheck(value: string) {
+  async function runCheck(
+    value: string,
+    {
+      syncInput = true,
+      scroll = true,
+      recordBulk = false,
+    }: RunCheckOptions = {}
+  ): Promise<boolean> {
     const handle = normalizeInput(value);
-    if (!handle) return;
+    if (!handle) return false;
     if (!isSubscribed && searchCount >= FREE_SEARCH_LIMIT) {
       setError("Free searches used. Upgrade to Pro for unlimited searches.");
       setPhase("error");
-      return;
+      return false;
     }
 
     abortRef.current?.abort();
@@ -650,20 +695,34 @@ export default function Home() {
     abortRef.current = ctrl;
 
     setUsername(handle);
-    setBulkInput(handle);
+    if (syncInput) {
+      setBulkInput(handle);
+      setBulkQueue([]);
+      setBulkHistory([]);
+    }
     setChecked(handle);
     setPhase("loading");
     setError(null);
     setResults([]);
+    setAssistantInsight(null);
     if (!isSubscribed) setSearchCount((count) => Math.min(FREE_SEARCH_LIMIT, count + 1));
 
-    window.requestAnimationFrame(() => {
+    if (scroll) window.requestAnimationFrame(() => {
       document
         .getElementById("results")
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
     try {
+      let collectedResults: CheckResult[] = [];
+      const applyResult = (result: CheckResult) => {
+        collectedResults = [
+          ...collectedResults.filter((item) => item.platform !== result.platform),
+          result,
+        ];
+        setResults(collectedResults);
+      };
+
       const res = await fetch(
         `/api/check?username=${encodeURIComponent(handle)}`,
         { signal: ctrl.signal }
@@ -694,43 +753,80 @@ export default function Home() {
           const trimmed = line.trim();
           if (!trimmed) continue;
           const result = JSON.parse(trimmed) as CheckResult;
-          setResults((prev) => [
-            ...prev.filter((item) => item.platform !== result.platform),
-            result,
-          ]);
+          applyResult(result);
         }
       }
 
       const remaining = buffer.trim();
       if (remaining) {
         const result = JSON.parse(remaining) as CheckResult;
-        setResults((prev) => [
-          ...prev.filter((item) => item.platform !== result.platform),
-          result,
-        ]);
+        applyResult(result);
       }
 
-      if (!ctrl.signal.aborted) setPhase("done");
+      if (!ctrl.signal.aborted) {
+        setPhase("done");
+        if (recordBulk) {
+          setBulkHistory((items) => [
+            ...items.filter(
+              (item) => item.name.toLowerCase() !== handle.toLowerCase()
+            ),
+            {
+              name: handle,
+              score: scoreName(handle, collectedResults),
+              available: collectedResults.filter(
+                (result) => result.status === "available"
+              ).length,
+              taken: collectedResults.filter((result) => result.status === "taken")
+                .length,
+              manual: collectedResults.filter(
+                (result) => result.status === "unknown"
+              ).length,
+            },
+          ]);
+        }
+        return true;
+      }
     } catch (err) {
-      if (ctrl.signal.aborted) return;
+      if (ctrl.signal.aborted) return false;
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setPhase("error");
     }
+    return false;
   }
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const names = parseBulkNames(bulkInput, isSubscribed);
     if (names.length === 0) return;
+
+    if (isSubscribed && names.length > 1) {
+      setBulkQueue(names);
+      setBulkHistory([]);
+      for (let index = 0; index < names.length; index += 1) {
+        const completed = await runCheck(names[index], {
+          syncInput: false,
+          scroll: index === 0,
+          recordBulk: true,
+        });
+        if (!completed) break;
+      }
+      return;
+    }
+
     setBulkQueue(names);
+    setBulkHistory([]);
     void runCheck(names[0]);
   }
 
   function checkNamed(name: string) {
+    setBulkQueue([]);
+    setBulkHistory([]);
     void runCheck(name);
   }
 
   function handleBulkInputChange(value: string) {
+    setBulkHistory([]);
+    setAssistantInsight(null);
     if (isSubscribed) {
       setBulkInput(value);
       setUsername(parseBulkNames(value, true)[0] ?? "");
@@ -749,6 +845,52 @@ export default function Home() {
       if (items.some((item) => item.toLowerCase() === key)) return items;
       return [name, ...items].slice(0, 8);
     });
+  }
+
+  function handleAssistantPrompt(prompt: string) {
+    if (!isSubscribed) return;
+    const recommendation = makeAlternatives(displayHandle)[0]?.name ?? displayHandle;
+    setAssistantInsight(
+      `${prompt}: ${recommendation} is the strongest next check because it keeps the base name readable while improving availability odds.`
+    );
+  }
+
+  async function onGeneratorSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (generatorBrief.trim().length < 12 || generatorLoading) return;
+
+    setGeneratorLoading(true);
+    setGeneratorError(null);
+    setGeneratedIdeas([]);
+    setGeneratorSource(null);
+
+    try {
+      const response = await fetch("/api/generate-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brief: generatorBrief,
+          audience: isSubscribed ? generatorAudience : "",
+          tone: isSubscribed ? generatorTone : "Basic",
+          tier: isSubscribed ? "pro" : "free",
+        }),
+      });
+      const data = (await response.json()) as GeneratorResponse & {
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Name generation failed.");
+
+      setGeneratedIdeas(data.ideas);
+      setGeneratorSource(data.source);
+    } catch (generatorFailure) {
+      setGeneratorError(
+        generatorFailure instanceof Error
+          ? generatorFailure.message
+          : "Name generation failed."
+      );
+    } finally {
+      setGeneratorLoading(false);
+    }
   }
 
   function handlePaymentClick(
@@ -775,6 +917,12 @@ export default function Home() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[#07080f] text-[#f2f4fb]">
+      <a
+        href="#search"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-black focus:text-[#07080f]"
+      >
+        Skip to checker
+      </a>
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -787,32 +935,35 @@ export default function Home() {
       />
 
       <header className="relative z-10 mx-auto flex max-w-[1160px] items-center gap-6 px-6 py-5">
-        <a href="#search" className="shrink-0">
+        <a href="#search" className="shrink-0 rounded-xl">
           <Logo />
         </a>
-        <nav className="hidden items-center gap-5 text-sm font-semibold text-[#aab0c4] md:flex lg:gap-7">
-          <a className="hover:text-white" href="#features">
+        <nav
+          aria-label="Primary navigation"
+          className="hidden items-center gap-5 text-sm font-semibold text-[#aab0c4] md:flex lg:gap-7"
+        >
+          <a className="rounded-lg transition hover:text-white" href="#features">
             Features
           </a>
-          <a className="hover:text-white" href="#how">
+          <a className="rounded-lg transition hover:text-white" href="#how">
             How It Works
           </a>
-          <a className="hover:text-white" href="#pricing">
+          <a className="rounded-lg transition hover:text-white" href="#generator">
+            Generator
+          </a>
+          <a className="rounded-lg transition hover:text-white" href="#pricing">
             Pricing
           </a>
-          <a className="hover:text-white" href="#privacy">
-            Privacy
-          </a>
-          <a className="hover:text-white" href="#contact">
+          <a className="rounded-lg transition hover:text-white" href="#contact">
             Contact
           </a>
-          <a className="hover:text-white" href="#faq">
+          <a className="rounded-lg transition hover:text-white" href="#faq">
             FAQ
           </a>
         </nav>
         <a
           href="#search"
-          className="ml-auto rounded-xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-5 py-2.5 text-sm font-black text-[#07080f] shadow-[0_12px_30px_rgba(91,140,255,0.25)]"
+          className="ml-auto whitespace-nowrap rounded-xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-4 py-2.5 text-sm font-black text-[#07080f] shadow-[0_12px_30px_rgba(91,140,255,0.25)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(91,140,255,0.32)] sm:px-5"
         >
           Try Free
         </a>
@@ -838,6 +989,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setIsSubscribed(false)}
+            aria-pressed={!isSubscribed}
             className={`min-h-10 flex-1 rounded-xl px-4 py-2 text-sm font-black transition ${
               !isSubscribed
                 ? "bg-white text-[#07080f]"
@@ -849,6 +1001,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => setIsSubscribed(true)}
+            aria-pressed={isSubscribed}
             className={`min-h-10 flex-1 rounded-xl px-4 py-2 text-sm font-black transition ${
               isSubscribed
                 ? "bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] text-[#07080f]"
@@ -896,12 +1049,13 @@ export default function Home() {
                 }
                 value={bulkInput}
                 onChange={(event) => handleBulkInputChange(event.target.value)}
-                className={`w-full resize-none rounded-2xl border border-transparent bg-transparent pl-10 pr-4 font-mono text-lg text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30 ${
+                aria-busy={isLoading}
+                className={`w-full resize-none rounded-2xl border border-transparent bg-transparent pl-10 font-mono text-lg text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30 ${
                   isSubscribed ? "min-h-[150px] py-4" : "h-14 overflow-hidden py-3"
-                }`}
+                } ${isSubscribed ? "pr-4" : "pr-4 sm:pr-[11.5rem]"}`}
               />
               {!isSubscribed && (
-                <span className="absolute right-3 top-3 rounded-full border border-[#ffc24d]/35 bg-[#33250b] px-3 py-1 text-xs font-black text-[#ffd982]">
+                <span className="absolute right-3 top-3 hidden rounded-full border border-[#ffc24d]/35 bg-[#33250b] px-3 py-1 text-xs font-black text-[#ffd982] sm:inline-flex">
                   Bulk Search (Pro Only)
                 </span>
               )}
@@ -909,10 +1063,12 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading || bulkNames.length === 0 || (!isSubscribed && remainingFreeSearches === 0)}
-              className="min-h-14 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-7 text-base font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.28)] transition disabled:cursor-not-allowed disabled:opacity-55 sm:min-w-[160px]"
+              className="min-h-14 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-7 text-base font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.28)] transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-[0_20px_42px_rgba(91,140,255,0.34)] disabled:cursor-not-allowed disabled:opacity-55 sm:min-w-[160px]"
             >
               {isLoading
-                ? "Checking..."
+                ? bulkQueue.length > 1
+                  ? `Checking ${bulkProgress}/${bulkQueue.length}`
+                  : "Checking..."
                 : isSubscribed && bulkNames.length > 1
                   ? `Check ${bulkNames.length} Names`
                   : "Check Name"}
@@ -925,7 +1081,7 @@ export default function Home() {
                   key={name}
                   type="button"
                   onClick={() => checkNamed(name)}
-                  className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 font-mono text-xs font-bold text-[#cdd2e2] hover:border-[#5b8cff]/50 hover:text-white"
+                  className={`rounded-xl border border-white/10 bg-black/20 px-3 py-2 font-mono text-xs font-bold text-[#cdd2e2] hover:text-white ${SOFT_INTERACTION}`}
                 >
                   {name}
                 </button>
@@ -940,7 +1096,7 @@ export default function Home() {
               key={chip}
               type="button"
               onClick={() => checkNamed(chip)}
-              className="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-2 font-mono text-xs font-semibold text-[#b8bfce] hover:border-[#5b8cff]/50 hover:text-white"
+              className={`rounded-xl border border-white/10 bg-white/[0.035] px-4 py-2 font-mono text-xs font-semibold text-[#b8bfce] hover:text-white ${SOFT_INTERACTION}`}
             >
               {chip}
             </button>
@@ -949,10 +1105,238 @@ export default function Home() {
       </section>
 
       <section
+        id="generator"
+        className="relative z-10 mx-auto max-w-[1160px] scroll-mt-8 px-6 py-8"
+      >
+        <div className="overflow-hidden rounded-[28px] border border-[#5b8cff]/25 bg-white/[0.045] shadow-[0_40px_100px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+          <div className="border-b border-white/10 px-5 py-6 sm:px-7">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase text-[#8fb0ff]">
+                  AI Business Name Generator
+                </div>
+                <h2 className="mt-2 text-2xl font-black text-white sm:text-3xl">
+                  Turn the business idea into names worth checking.
+                </h2>
+                <p className="mt-3 max-w-[62ch] text-sm leading-6 text-[#aab0c4]">
+                  Free gives you three basic starting points. Pro uses your audience
+                  and tone to create ten stronger, ranked brand directions.
+                </p>
+              </div>
+              <span
+                className={`w-fit rounded-full border px-3 py-1 text-xs font-black ${
+                  isSubscribed
+                    ? "border-[#46e0a0]/35 bg-[#46e0a0]/10 text-[#6fe9b4]"
+                    : "border-[#ffc24d]/35 bg-[#ffc24d]/10 text-[#ffd982]"
+                }`}
+              >
+                {isSubscribed ? "Pro generator" : "Free generator"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <form onSubmit={onGeneratorSubmit} className="space-y-5 p-5 sm:p-7">
+              <div>
+                <label
+                  htmlFor="business-brief"
+                  className="mb-2 block text-xs font-black uppercase text-[#9298ad]"
+                >
+                  Describe the business
+                </label>
+                <textarea
+                  id="business-brief"
+                  value={generatorBrief}
+                  onChange={(event) => setGeneratorBrief(event.target.value)}
+                  placeholder="A bookkeeping app that helps freelancers understand cash flow without accounting jargon"
+                  minLength={12}
+                  maxLength={500}
+                  rows={5}
+                  required
+                  className="w-full resize-none rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-6 text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30"
+                />
+                <div className="mt-2 text-right text-xs text-[#6b7186]">
+                  {generatorBrief.length}/500
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="generator-audience"
+                    className="text-xs font-black uppercase text-[#9298ad]"
+                  >
+                    Target audience
+                  </label>
+                  {!isSubscribed && (
+                    <span className="text-xs font-black text-[#8fb0ff]">Pro context</span>
+                  )}
+                </div>
+                <input
+                  id="generator-audience"
+                  value={generatorAudience}
+                  onChange={(event) => setGeneratorAudience(event.target.value)}
+                  placeholder="Freelance designers and consultants"
+                  disabled={!isSubscribed}
+                  maxLength={120}
+                  className="min-h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-white placeholder:text-[#51586c] focus:border-[#5b8cff]/60 focus:outline-none focus:ring-2 focus:ring-[#5b8cff]/30 disabled:cursor-not-allowed disabled:opacity-45"
+                />
+              </div>
+
+              <fieldset disabled={!isSubscribed}>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <legend className="text-xs font-black uppercase text-[#9298ad]">
+                    Brand tone
+                  </legend>
+                  {!isSubscribed && (
+                    <span className="text-xs font-black text-[#8fb0ff]">Pro control</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+                  {GENERATOR_TONES.map((tone) => (
+                    <button
+                      key={tone}
+                      type="button"
+                      onClick={() => setGeneratorTone(tone)}
+                      aria-pressed={generatorTone === tone}
+                      className={`min-h-10 rounded-xl border px-3 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        generatorTone === tone
+                          ? "border-[#5b8cff]/70 bg-[#5b8cff]/20 text-white"
+                          : "border-white/10 bg-black/20 text-[#9298ad] hover:text-white"
+                      }`}
+                    >
+                      {tone}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <button
+                type="submit"
+                disabled={generatorLoading || generatorBrief.trim().length < 12}
+                className="min-h-14 w-full rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 text-sm font-black text-[#07080f] shadow-[0_16px_35px_rgba(91,140,255,0.24)] transition enabled:hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
+              >
+                {generatorLoading
+                  ? "Building name directions..."
+                  : isSubscribed
+                    ? "Generate 10 Pro Names"
+                    : "Generate 3 Basic Names"}
+              </button>
+            </form>
+
+            <div
+              className="border-t border-white/10 bg-black/15 p-5 sm:p-7 lg:border-l lg:border-t-0"
+              aria-live="polite"
+              aria-busy={generatorLoading}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase text-[#7e859b]">
+                    Name directions
+                  </div>
+                  <div className="mt-1 text-lg font-black text-white">
+                    {generatedIdeas.length > 0
+                      ? `${generatedIdeas.length} ideas generated`
+                      : "Your shortlist starts here"}
+                  </div>
+                </div>
+                {generatorSource && (
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-black text-[#c2c7d8]">
+                    {generatorSource === "ai"
+                      ? "AI ranked"
+                      : generatorSource === "fallback"
+                        ? "Demo mode"
+                        : "Basic ideas"}
+                  </span>
+                )}
+              </div>
+
+              {generatorError && (
+                <div className="mb-4 border-y border-[#a33242]/70 bg-[#351017] px-4 py-3 text-sm font-semibold text-[#ff8c98]">
+                  {generatorError}
+                </div>
+              )}
+
+              {generatedIdeas.length > 0 ? (
+                <div className="divide-y divide-white/10 border-y border-white/10">
+                  {generatedIdeas.map((idea) => (
+                    <article
+                      key={idea.handle}
+                      className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-mono text-base font-black text-white">
+                            {idea.name}
+                          </h3>
+                          <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-black uppercase text-[#8fb0ff]">
+                            {idea.style}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm font-bold text-[#cdd2e2]">
+                          {idea.tagline}
+                        </p>
+                        {isSubscribed && (
+                          <p className="mt-1 text-xs leading-5 text-[#7e859b]">
+                            {idea.why}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 sm:justify-end">
+                        <span className="text-sm font-black text-[#6fe9b4]">
+                          {idea.score}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => checkNamed(idea.handle)}
+                          className="min-h-10 rounded-xl border border-[#5b8cff]/40 bg-[#5b8cff]/10 px-3 text-xs font-black text-[#8fb0ff] transition hover:border-[#5b8cff]/70 hover:text-white"
+                        >
+                          Check name
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-[360px] items-center justify-center border-y border-dashed border-white/10 px-6 text-center">
+                  <div className="max-w-sm">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-[#5b8cff]/30 bg-[#5b8cff]/15 font-mono font-black text-[#8fb0ff]">
+                      AI
+                    </div>
+                    <p className="mt-4 text-sm leading-6 text-[#9298ad]">
+                      Describe what the business does, then generate names you can
+                      send directly into the availability checker.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!isSubscribed && generatedIdeas.length > 0 && (
+                <div className="mt-4 border-l-2 border-[#5b8cff] pl-4 text-sm leading-6 text-[#aab0c4]">
+                  Pro adds seven more names, audience targeting, tone controls,
+                  ranking explanations, and stronger brand strategy.
+                </div>
+              )}
+              {generatorSource === "fallback" && (
+                <div className="mt-4 text-xs leading-5 text-[#ffd982]">
+                  Demo mode is active. Connect the server-side AI key before launch
+                  for model-generated Pro results.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
         id="results"
         className="relative z-10 mx-auto grid max-w-[1160px] gap-5 px-6 py-8 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]"
       >
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-7">
+        <div
+          className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-[0_40px_100px_-40px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-7"
+          aria-busy={isLoading}
+          aria-live="polite"
+        >
           <div className="mb-6 grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] sm:grid-cols-4">
             <div className="border-b border-white/10 p-4 sm:border-b-0 sm:border-r">
               <div className="text-2xl font-black text-white">{completeCount}</div>
@@ -974,7 +1358,7 @@ export default function Home() {
             </div>
             <div className="border-t border-white/10 p-4 sm:border-l sm:border-t-0">
               <div className="text-2xl font-black text-white">
-                {isSubscribed ? "∞" : remainingFreeSearches}
+                {isSubscribed ? "All" : remainingFreeSearches}
               </div>
               <div className="mt-1 text-xs text-[#7e859b]">
                 {isSubscribed ? "Pro searches" : "free searches left"}
@@ -999,7 +1383,8 @@ export default function Home() {
               </p>
               {bulkQueue.length > 1 && (
                 <p className="mt-2 text-xs font-semibold text-[#8fb0ff]">
-                  Bulk queue ready: {bulkQueue.slice(0, 4).join(", ")}
+                  Bulk run {bulkProgress}/{bulkQueue.length}:{" "}
+                  {bulkQueue.slice(0, 4).join(", ")}
                   {bulkQueue.length > 4 ? ` +${bulkQueue.length - 4} more` : ""}
                 </p>
               )}
@@ -1009,12 +1394,12 @@ export default function Home() {
                 type="button"
                 onClick={() => saveName(displayHandle)}
                 disabled={!isSubscribed || !hasAvailableResult || savedNames.has(displayHandle.toLowerCase())}
-                className="min-h-12 rounded-2xl border border-[#ff6b7a]/35 bg-[#ff6b7a]/10 px-4 text-sm font-black text-[#ff9ca6] transition enabled:hover:border-[#ff6b7a]/70 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.035] disabled:text-[#7e859b]"
+                className="min-h-12 rounded-2xl border border-[#ff6b7a]/35 bg-[#ff6b7a]/10 px-4 text-sm font-black text-[#ff9ca6] transition enabled:hover:-translate-y-0.5 enabled:hover:border-[#ff6b7a]/70 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.035] disabled:text-[#7e859b]"
               >
                 {isSubscribed
                   ? savedNames.has(displayHandle.toLowerCase())
-                    ? "♥ Saved"
-                    : "♡ Save Name"
+                    ? "Saved"
+                    : "Save Name"
                   : "Lock Watchlist"}
               </button>
               <div className="min-w-[170px] rounded-2xl border border-[#5b8cff]/25 bg-[#5b8cff]/10 p-4">
@@ -1046,7 +1431,47 @@ export default function Home() {
             </div>
           )}
 
-          <ul className="flex flex-col gap-2">
+          {bulkHistory.length > 0 && (
+            <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold uppercase text-[#7e859b]">
+                    Bulk results
+                  </div>
+                  <div className="mt-1 text-sm font-black text-white">
+                    {bulkHistory.length} of {bulkQueue.length} names checked
+                  </div>
+                </div>
+                <span className="rounded-full border border-[#46e0a0]/30 bg-[#46e0a0]/10 px-3 py-1 text-xs font-black text-[#6fe9b4]">
+                  Pro
+                </span>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {bulkHistory.map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => checkNamed(item.name)}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3 text-left transition hover:border-[#5b8cff]/50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-mono text-sm font-black text-white">
+                        {item.name}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-[#7e859b]">
+                        {item.available} available, {item.manual} manual
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm font-black text-[#6fe9b4]">
+                      {item.score}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <ul id="platform-results" className="flex flex-col gap-2">
             {visiblePlatforms.map((platform) => (
               <PlatformRow
                 key={platform.name}
@@ -1064,8 +1489,9 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setShowAllPlatforms((open) => !open)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-black text-[#8fb0ff] hover:border-[#5b8cff]/50 hover:text-white"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-black text-[#8fb0ff] transition hover:border-[#5b8cff]/50 hover:text-white"
               aria-expanded={showAllPlatforms}
+              aria-controls="platform-results"
             >
               {showAllPlatforms
                 ? "Show fewer apps"
@@ -1096,15 +1522,15 @@ export default function Home() {
             </p>
             <div className="mt-4 space-y-2 text-sm font-semibold text-[#cdd2e2]">
               <div className="flex gap-2">
-                <span className="text-[#6fe9b4]">✓</span>
+                <span className="text-[#6fe9b4]">OK</span>
                 No fake availability
               </div>
               <div className="flex gap-2">
-                <span className="text-[#6fe9b4]">✓</span>
+                <span className="text-[#6fe9b4]">OK</span>
                 Official profile links
               </div>
               <div className="flex gap-2">
-                <span className="text-[#6fe9b4]">✓</span>
+                <span className="text-[#6fe9b4]">OK</span>
                 Streamed results as checks finish
               </div>
             </div>
@@ -1136,14 +1562,23 @@ export default function Home() {
                 <button
                   key={prompt}
                   type="button"
+                  onClick={() => handleAssistantPrompt(prompt)}
                   disabled={!isSubscribed}
-                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-left text-xs font-bold text-[#cdd2e2] disabled:cursor-not-allowed disabled:text-[#7e859b] enabled:hover:border-[#5b8cff]/50 enabled:hover:text-white"
+                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-left text-xs font-bold text-[#cdd2e2] transition disabled:cursor-not-allowed disabled:text-[#7e859b] enabled:hover:border-[#5b8cff]/50 enabled:hover:text-white"
                 >
                   {prompt}
                   <span className="text-[#8fb0ff]">{isSubscribed ? "Ask" : "Lock"}</span>
                 </button>
               ))}
             </div>
+            {assistantInsight && (
+              <div
+                className="mt-4 rounded-2xl border border-[#46e0a0]/25 bg-[#46e0a0]/10 px-4 py-3 text-sm leading-6 text-[#c7f6df]"
+                aria-live="polite"
+              >
+                {assistantInsight}
+              </div>
+            )}
           </div>
 
           <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
@@ -1174,7 +1609,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => checkNamed(item.name)}
-                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#8fb0ff] hover:bg-white/[0.06]"
+                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#8fb0ff] transition hover:bg-white/[0.06]"
                     >
                       Check
                     </button>
@@ -1182,9 +1617,9 @@ export default function Home() {
                       type="button"
                       onClick={() => saveName(item.name)}
                       disabled={!isSubscribed || savedNames.has(item.name.toLowerCase())}
-                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#ff9ca6] hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-[#7e859b]"
+                      className="rounded-lg px-2 py-1 text-xs font-bold text-[#ff9ca6] transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-[#7e859b]"
                     >
-                      {savedNames.has(item.name.toLowerCase()) ? "♥" : "♡"}
+                      {savedNames.has(item.name.toLowerCase()) ? "Saved" : "Save"}
                     </button>
                   </span>
                 </div>
@@ -1203,6 +1638,13 @@ export default function Home() {
               Clean spelling, strong score, and a domain-ready variation for{" "}
               {displayHandle}.
             </p>
+            <button
+              type="button"
+              onClick={() => checkNamed(bestAlternative.name)}
+              className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-xs font-black text-[#8fb0ff] transition hover:border-[#5b8cff]/50 hover:text-white"
+            >
+              Check recommendation
+            </button>
           </div>
 
           <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl">
@@ -1244,7 +1686,7 @@ export default function Home() {
             ) : (
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-center">
                 <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-lg">
-                  🔒
+                  Pro
                 </div>
                 <div className="font-black text-white">Save names with Pro</div>
                 <p className="mt-2 text-sm leading-6 text-[#9298ad]">
@@ -1332,7 +1774,8 @@ export default function Home() {
           </h2>
           <p className="mx-auto mt-4 max-w-[58ch] leading-7 text-[#aab0c4]">
             Free is intentionally simple. Pro turns AvailifyAi into a serious
-            naming workspace with bulk search, AI help, premium TLDs, and alerts.
+            naming workspace with ten-name AI generation, bulk search, premium
+            TLDs, and alerts.
           </p>
         </div>
 
@@ -1543,12 +1986,15 @@ export default function Home() {
             </label>
             <button
               type="submit"
-              className="min-h-12 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 text-sm font-black text-[#07080f]"
+              className="min-h-12 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#8a7bff] px-6 text-sm font-black text-[#07080f] transition hover:-translate-y-0.5 hover:shadow-[0_16px_35px_rgba(91,140,255,0.28)]"
             >
               Send Message
             </button>
             {contactSent && (
-              <div className="rounded-2xl border border-[#46e0a0]/35 bg-[#46e0a0]/10 px-4 py-3 text-sm font-semibold text-[#6fe9b4]">
+              <div
+                className="rounded-2xl border border-[#46e0a0]/35 bg-[#46e0a0]/10 px-4 py-3 text-sm font-semibold text-[#6fe9b4]"
+                aria-live="polite"
+              >
                 Thanks. Your message is ready for delivery once a contact
                 provider is connected.
               </div>
@@ -1584,7 +2030,7 @@ export default function Home() {
                 >
                   {faq.question}
                   <span className="text-2xl text-[#8fb0ff]">
-                    {open ? "−" : "+"}
+                    {open ? "-" : "+"}
                   </span>
                 </button>
                 {open && (

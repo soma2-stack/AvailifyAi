@@ -17,7 +17,7 @@ function result(
 const enc = encodeURIComponent;
 
 /* -------------------------------------------------------------------------- */
-/*  Tier A — real checks                                                       */
+/*  Tier A - real checks                                                       */
 /* -------------------------------------------------------------------------- */
 
 const github: PlatformAdapter = {
@@ -89,7 +89,7 @@ const youtube: PlatformAdapter = {
         /\/channel\/UC[\w-]{20,}/.test(body) || /"channelId":"UC[\w-]{20,}"/.test(body);
       const looksLikeError =
         /"status":"ERROR"/.test(body) ||
-        /This page isn['’&#x27;]*t available/i.test(body);
+        /This page isn['\u2019&#x27;]*t available/i.test(body);
       if (hasChannel && !looksLikeError)
         return result("YouTube", "taken", "youtube.com", url);
       if (looksLikeError)
@@ -101,7 +101,7 @@ const youtube: PlatformAdapter = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*  Tier B — best-effort (never guesses; degrades to "unknown")               */
+/*  Tier B - best-effort (never guesses; degrades to "unknown")               */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -121,7 +121,7 @@ async function bestEffortScrape(
   if (res.status === 404)
     return result(platform, "available", "best-effort scrape", profileUrl);
 
-  // Redirect to a login/consent wall → we genuinely can't tell.
+  // Redirect to a login/consent wall, so we genuinely can't tell.
   if (res.status >= 300 && res.status < 400)
     return result(platform, "unknown", "best-effort scrape", profileUrl, "redirected");
 
@@ -151,7 +151,7 @@ const tiktok: PlatformAdapter = {
       `https://www.tiktok.com/@${enc(u)}`,
       tiktok.profileUrl(u),
       [/"uniqueId":"/, /"userInfo":/],
-      [/"statusCode":10202/, /Couldn['’]t find this account/i]
+      [/"statusCode":10202/, /Couldn['\u2019]t find this account/i]
     ),
 };
 
@@ -161,7 +161,7 @@ const x: PlatformAdapter = {
   profileUrl: (u) => `https://x.com/${u}`,
   validate: validators.x,
   // x.com is a client-rendered SPA that returns 200 for everything, so a
-  // server-side scrape can't reliably distinguish. Always best-effort → unknown.
+  // server-side scrape can't reliably distinguish. Always best-effort -> unknown.
   check: (u) =>
     bestEffortScrape("X", `https://x.com/${enc(u)}`, x.profileUrl(u), []),
 };

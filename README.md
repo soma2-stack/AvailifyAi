@@ -14,11 +14,12 @@ deploys to Vercel with zero configuration.
 - 3 searches total.
 - Basic availability check only.
 - .com domain result.
+- 3 basic business-name starters per brief.
 
 **Pro ($10/mo)**
 
 - Unlimited searches.
-- AI Name Assistant for brainstorming and picking stronger names.
+- AI business-name generator with 10 ranked, contextual ideas.
 - Bulk Domain Checker for up to 20 names at once.
 - Instant TLD checks for .com, .ai, .io, .net, and .co.
 - Watchlist and alerts for saved favorite names.
@@ -46,26 +47,26 @@ hard **5-second timeout** and a realistic browser `User-Agent`. The API returns:
 
 | Status        | UI color | Meaning                                                      |
 | ------------- | -------- | ------------------------------------------------------------ |
-| `available`   | 🟢 green  | The handle is free.                                          |
-| `taken`       | 🔴 red    | The handle is in use.                                        |
-| `unknown`     | ⚪ grey   | Couldn't determine — use the **Open ↗** link to verify by hand. |
+| `available`   | green | The handle is free.                                           |
+| `taken`       | red   | The handle is in use.                                         |
+| `unknown`     | grey  | Couldn't determine; use the **Open** link to verify by hand.  |
 
 ### Tiers
 
-**Tier A — real checks** (authoritative):
+**Tier A - real checks** (authoritative):
 
-- **GitHub** — `GET api.github.com/users/{u}` → `404` available, `200` taken.
-- **Reddit** — `GET reddit.com/user/{u}/about.json` → missing/error body
+- **GitHub** - `GET api.github.com/users/{u}` -> `404` available, `200` taken.
+- **Reddit** - `GET reddit.com/user/{u}/about.json` -> missing/error body
   available, valid account taken.
-- **YouTube** — `GET youtube.com/@{u}` → `404` available, channel page taken.
+- **YouTube** - `GET youtube.com/@{u}` -> `404` available, channel page taken.
   Guards against soft-`200` error pages.
-- **Domains** — DNS checks for `.com`, `.ai`, `.io`, `.net`, and `.co`.
+- **Domains** - DNS checks for `.com`, `.ai`, `.io`, `.net`, and `.co`.
 
-**Tier B — best-effort/manual checks** (TikTok, X, Instagram, Threads, Twitch,
+**Tier B - best-effort/manual checks** (TikTok, X, Instagram, Threads, Twitch,
 Facebook, Snapchat, Pinterest, LinkedIn, Steam, Spotify, SoundCloud, Roblox,
 Telegram, Medium, Substack, GitLab, and Discord): these platforms often block
 automated requests or do not expose reliable public username APIs. The checker
-**never guesses** — if a request is blocked, rate-limited, ambiguous, or needs an
+**never guesses** - if a request is blocked, rate-limited, ambiguous, or needs an
 in-app lookup, it returns `unknown` so you can verify manually via the profile
 link.
 
@@ -95,9 +96,9 @@ Requires **Node.js 18.17+**.
 # 1. Install dependencies
 npm install
 
-# 2. (optional) enable the real Twitch check
+# 2. (optional) enable Twitch and Pro AI generation
 cp .env.example .env.local
-# then fill in TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET
+# then fill in TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET / OPENAI_API_KEY
 
 # 3. Start the dev server
 npm run dev
@@ -121,10 +122,12 @@ This app is zero-config on Vercel.
 
 1. Push this repo to GitHub.
 2. Go to [vercel.com/new](https://vercel.com/new) and **import** the repo.
-3. Framework preset auto-detects **Next.js** — accept the defaults.
+3. Framework preset auto-detects **Next.js** - accept the defaults.
 4. *(Optional)* Add `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` under
-   **Settings → Environment Variables** to enable the real Twitch check.
-5. Click **Deploy**.
+   **Settings > Environment Variables** to enable the real Twitch check.
+5. Add the server-only `OPENAI_API_KEY` variable to enable model-generated Pro
+   business names. Without it, the generator stays usable in demo mode.
+6. Click **Deploy**.
 
 Or with the CLI:
 
@@ -134,7 +137,7 @@ vercel        # preview deploy
 vercel --prod # production deploy
 ```
 
-The API routes run as serverless functions automatically — no extra setup.
+The API routes run as serverless functions automatically - no extra setup.
 
 ---
 
@@ -145,7 +148,7 @@ The API routes run as serverless functions automatically — no extra setup.
   `unknown`. This avoids false positives from login walls and JS-only pages.
 - Availability is a best-effort snapshot, not a reservation. Always confirm on
   the platform itself before relying on a handle.
-- All network failures degrade gracefully to `unknown` — the app never crashes
+- All network failures degrade gracefully to `unknown` - the app never crashes
   on a bad upstream.
 
 ## Project structure
